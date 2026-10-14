@@ -1,0 +1,5 @@
+{
+    "extends": "../.markdownlint.json",
+    "no-space-in-code": false,
+    "fenced-code-language": false
+}

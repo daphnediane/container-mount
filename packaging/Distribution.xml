@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Distribution script for the distrofs product archive.
+     @VERSION@ / @COMPONENT@ are filled in by scripts/build-pkg.sh.
+     arm64-only today (the only host build); no macOS floor — unlike
+     container-distro nothing here needs `container`. Revisit both
+     when the FSKit module lands (it will want macOS >= 26). -->
+<installer-gui-script minSpecVersion="2">
+    <title>distrofs</title>
+    <organization>io.github.daphnediane</organization>
+    <domains enable_localSystem="true" enable_anywhere="false" enable_currentUserHome="false"/>
+    <options customize="never" hostArchitectures="arm64" rootVolumeOnly="true"/>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <license file="licenses.txt" mime-type="text/plain"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <choices-outline>
+        <line choice="default">
+            <line choice="io.github.daphnediane.distrofs"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="io.github.daphnediane.distrofs" title="distrofs">
+        <pkg-ref id="io.github.daphnediane.distrofs"/>
+    </choice>
+    <pkg-ref id="io.github.daphnediane.distrofs" version="@VERSION@" onConclusion="none">@COMPONENT@</pkg-ref>
+</installer-gui-script>

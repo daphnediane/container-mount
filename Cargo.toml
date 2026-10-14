@@ -1,0 +1,75 @@
+[package]
+name = "distrofs"
+description = "Guest-side file server and host client for reaching Linux-guest filesystems over a relayed socket (`\\\\wsl$`-style), with a mutual-token handshake and a validating host client"
+version = "0.1.0-dev"
+edition = "2024"
+rust-version = "1.89"
+license = "BSD-2-Clause"
+authors = ["Daphne Pfister"]
+homepage = "https://github.com/daphnediane/distrofs"
+repository = "https://github.com/daphnediane/distrofs"
+readme = "README.md"
+# Published crate stays lean: binaries + assets + notices only.
+exclude = [
+    "/.cargo/",
+    "/.claude/",
+    "/.devin/",
+    "/.github/",
+    "/.templates/",
+    "/.vscode/",
+    "/.markdownlint.json",
+    "/docs/",
+    "/packaging/",
+    "/scripts/",
+    "/tests/",
+    "/deny.toml",
+    "/SPLIT.md",
+]
+
+[lib]
+name = "distrofs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "distrofs"
+path = "src/bin/distrofs/main.rs"
+
+# Pure-Rust dependencies only: the guest server is linked with rust-lld
+# against Rust's self-contained musl (.cargo/config.toml), with no cross
+# C toolchain — no `ring`, no `openssl`. Downloads (fetch-servers,
+# update) spawn the platform curl/tar instead of an HTTP stack.
+[dependencies]
+anyhow = "1.0"
+libc = "0.2"
+postcard = { version = "1", default-features = false, features = ["use-std"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+sha2 = "0.11"
+
+[dev-dependencies]
+tempfile = "3"
+
+# `cargo release` conventions (dry-run by default, `-x` to execute):
+# strips the -dev suffix, commits `chore: release X.Y.Z`, and tags
+# `vX.Y.Z`. crates.io publish and git push stay manual.
+[package.metadata.release]
+allow-branch = ["main", "release/*"]
+consolidate-commits = false
+pre-release-commit-message = "chore: release {{version}}"
+tag-name = "v{{version}}"
+tag-message = "distrofs {{version}}"
+publish = false
+push = false
+
+# Prebuilt binaries land on each GitHub Release (scripts/build-release.sh,
+# driven by .github/workflows/release.yml) — `cargo binstall distrofs`
+# fetches the matching tarball instead of compiling.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
+pkg-fmt = "tgz"
+bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

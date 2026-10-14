@@ -1,0 +1,87 @@
+name: release
+
+# Pushing an annotated v* tag verifies it against the package version,
+# re-runs the tests, builds the release artifacts via
+# scripts/build-pkg.sh, and drafts the GitHub Release from the
+# CHANGELOG section — the maintainer reviews and publishes the draft.
+#
+# Assets produced (the names `fetch-servers`/`update` look for):
+#   distrofs-<ver>-unsigned.pkg            — macOS installer; a signed
+#                                          copy replaces it minus
+#                                          `-unsigned`
+#   distrofs-servers-<ver>.tar.gz          — distrofs-server-aarch64 +
+#                                          distrofs-server-x86_64
+#   distrofs-aarch64-apple-darwin-v<ver>-unsigned.tar.gz
+#                                        — distrofs + both server
+#                                          binaries; signed copies are
+#                                          uploaded over this name
+#                                          minus `-unsigned`
+#   THIRD-PARTY-NOTICES.yaml, SBOM when cargo-cyclonedx is present
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # master
+        with:
+          toolchain: stable
+          targets: aarch64-unknown-linux-musl, x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Verify tag matches package version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          tag="${TAG#v}"
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ "$tag" != "$version" ]; then
+            echo "tag $TAG != Cargo.toml package version $version" >&2
+            exit 1
+          fi
+
+      - run: cargo test --workspace
+
+      - name: Install supply-chain tools
+        run: |
+          cargo install --locked cargo-auditable cargo-cyclonedx
+
+      - name: Build release artifacts
+        run: scripts/build-pkg.sh
+
+      - name: Extract CHANGELOG notes
+        env:
+          TAG: ${{ github.ref_name }}
+        # Literal-prefix match on `## X.Y.Z `, stop at the next `## `
+        # header — the section header line itself is included.
+        run: |
+          awk -v hdr="## ${TAG#v} " '
+            f && /^## / { exit }
+            index($0, hdr) == 1 { f = 1 }
+            f
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "no CHANGELOG.md section for ${TAG#v}" >&2
+            exit 1
+          fi
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          prerelease=
+          case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease;; esac
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --notes-file notes.md \
+            --title "distrofs ${GITHUB_REF_NAME#v}" \
+            $prerelease \
+            scratch/pkg/distrofs-*.pkg \
+            scratch/pkg/distrofs-*.tar.gz \
+            scratch/pkg/*-sbom.cdx.json \
+            THIRD-PARTY-NOTICES.yaml
