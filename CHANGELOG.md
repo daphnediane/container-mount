@@ -42,4 +42,4 @@ and audited against the commit log.
   `build-pkg-signed.sh` (Developer ID via gitignored
   `packaging/signing.local.conf`), `build-servers.sh`,
   `install-local.sh`, `dev-clean.sh`; design docs in
-  `docs/design/{protocol,security,filesystems,packaging,release}.md`.
+  `docs/design/{protocol,security,filesystems,packaging,release,install-layout,server-portability}.md`.

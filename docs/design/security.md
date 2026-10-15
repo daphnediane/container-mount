@@ -90,6 +90,14 @@ it:
 - `update` never self-elevates, refuses to run as root, and refuses
   to replace the copy installed under a container-plugins dir — that
   copy belongs to the embedding package.
+- `fetch-servers` installs the bundle matching the binary's own
+  version — client and server are lock-step. Fetched servers get the
+  same digest + stamp verification wherever they land: the prefix
+  `libexec` dir or, when it isn't writable (packaged installs,
+  non-root users), the per-user servers dir — a user-writable
+  location is acceptable there because only the user's own sessions
+  consume it. An explicit server-path override, if added, is a
+  `--dev` seam only.
 - `DISTROFS_RELEASES_URL` is a **dev-only** seam honored only behind
   `--dev` on that invocation — an env var alone can never redirect
   release downloads.

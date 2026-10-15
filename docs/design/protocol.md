@@ -248,6 +248,13 @@ and Finder get identical enforcement.
 Every `distrofs` build embeds a scannable stamp —
 `distrofs-version:<version>:protocol:<n>` — so server discovery can
 reject a stale or misplaced binary before launching it rather than
-surfacing a failed exec or a hung handshake.
+surfacing a failed exec or a hung handshake. The stamp may carry
+trailing `key:value` pairs (build identity — `commit`, `dirty`);
+scanners ignore unknown keys.
+
+Strict version equality in the handshake is a pre-1.0 policy —
+client and server ship lock-step. The post-1.0 design target
+(server-advertised protocol ranges) is in
+[install-layout.md](install-layout.md#protocol-version-policy).
 
 [postcard]: https://docs.rs/postcard
