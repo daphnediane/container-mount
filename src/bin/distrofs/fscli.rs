@@ -10,13 +10,16 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileExt, MetadataExt, PermissionsExt};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use distrofs::client::{Client, Resolved};
-use distrofs::proto::{Attr, FileKind, MAX_IO, OpenFlags, ROOT, VERSION};
+use distrofs::client::{Client, Error, Resolved};
+use distrofs::proto::{
+    Attr, CAP_SEEK, Errno, FileKind, MAX_IO, NodeId, OpenFlags, ROOT, SeekWhence, SetAttr, VERSION,
+};
 
 use crate::table::columns;
 
@@ -40,6 +43,10 @@ pub fn run(cmd: &str, args: &[String], c: &Client, via: &str, peer_verified: boo
         "put" => match args {
             [src, path] => put(c, Path::new(src), path),
             _ => bail!("usage: distrofs put SRC PATH"),
+        },
+        "cp" => match args {
+            [src, path] => cp(c, src, path),
+            _ => bail!("usage: distrofs cp SRC PATH"),
         },
         "check" => check(c, via, peer_verified),
         _ => bail!("unknown command `{cmd}`"),
@@ -223,6 +230,113 @@ fn stat(c: &Client, path: &str, dereference: bool) -> Result<()> {
     Ok(())
 }
 
+/// Stream `fh` to `out` in `MAX_IO` chunks.
+fn pump_read(c: &Client, fh: u64, out: &mut impl Write) -> Result<()> {
+    let mut off = 0u64;
+    loop {
+        let chunk = c.read(fh, off, MAX_IO)?;
+        if chunk.is_empty() {
+            return Ok(());
+        }
+        out.write_all(&chunk)?;
+        off += chunk.len() as u64;
+    }
+}
+
+/// The guest's data extents copied into `f`; holes stay unallocated.
+/// APFS allocates the flushed gaps of an extended file, so the hole
+/// ranges are punched back out before close.
+fn get_sparse(c: &Client, fh: u64, size: u64, f: &mut File) -> Result<()> {
+    let mut holes = Vec::new();
+    let mut pos = 0;
+    let mut end = 0; // end of the last copied extent
+    while pos < size {
+        let d = match c.seek(fh, pos, SeekWhence::Data) {
+            Ok(d) => d,
+            // ENXIO: the rest of the file is a hole.
+            Err(Error::Guest(Errno::ENXIO)) => break,
+            Err(e) => return Err(e.into()),
+        };
+        if d >= size {
+            break;
+        }
+        if d > end {
+            holes.push((end, d));
+        }
+        let h = c.seek(fh, d, SeekWhence::Hole)?.min(size);
+        let mut off = d;
+        while off < h {
+            let chunk = c.read(fh, off, (h - off).min(MAX_IO as u64) as u32)?;
+            if chunk.is_empty() {
+                break;
+            }
+            f.write_all_at(&chunk, off)?;
+            off += chunk.len() as u64;
+        }
+        end = h;
+        pos = h;
+    }
+    if end < size {
+        holes.push((end, size));
+    }
+    // A trailing hole carries no data — the size sets it.
+    f.set_len(size)?;
+    let blk = punch_align(f);
+    for (off, end) in holes {
+        punch_hole(f, blk, off, end - off);
+    }
+    Ok(())
+}
+
+/// Block size hole punches align to — `f_bsize`, 4096 if unknown.
+fn punch_align(f: &File) -> u64 {
+    // SAFETY: `s` is ours and the fd is live.
+    unsafe {
+        let mut s: libc::statfs = std::mem::zeroed();
+        if libc::fstatfs(f.as_raw_fd(), &mut s) == 0 && s.f_bsize > 0 {
+            s.f_bsize as u64
+        } else {
+            4096
+        }
+    }
+}
+
+/// Free whole filesystem blocks in `off .. off + len`. Best-effort —
+/// where punching isn't supported the range keeps its (correct)
+/// zeros, just allocated.
+fn punch_hole(f: &File, blk: u64, off: u64, len: u64) {
+    // `fpunchhole_t` and `F_PUNCHHOLE` from <fcntl.h> — libc doesn't
+    // bind the struct.
+    #[repr(C)]
+    struct FPunchhole {
+        fp_flags: u32,
+        reserved: u32,
+        fp_offset: i64,
+        fp_length: i64,
+    }
+    const F_PUNCHHOLE: libc::c_int = 99;
+
+    let start = off.div_ceil(blk);
+    let end = (off + len) / blk;
+    if end <= start {
+        return;
+    }
+    let p = FPunchhole {
+        fp_flags: 0,
+        reserved: 0,
+        fp_offset: (start * blk) as i64,
+        fp_length: ((end - start) * blk) as i64,
+    };
+    // SAFETY: `p` is a valid fpunchhole_t for the call's duration.
+    unsafe { libc::fcntl(f.as_raw_fd(), F_PUNCHHOLE, &p) };
+}
+
+/// Whether `e` says the server/fs can't scan extents.
+fn extents_unsupported(e: &anyhow::Error) -> bool {
+    matches!(e.downcast_ref::<Error>(), Some(Error::Guest(e))
+        if *e == Errno::EOPNOTSUPP)
+}
+
 fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
     let r = c.resolve(path.as_bytes(), true)?;
     match r.attr.kind {
@@ -230,9 +344,9 @@ fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
         FileKind::Dir => bail!("{} is a directory", display(&r.path)),
         _ => bail!("{} is not a regular file", display(&r.path)),
     }
-    let mut out: Box<dyn Write> = match dest {
-        None => Box::new(io::stdout().lock()),
-        Some(p) if p.as_os_str() == "-" => Box::new(io::stdout().lock()),
+    let file = match dest {
+        None => None,
+        Some(p) if p.as_os_str() == "-" => None,
         Some(p) => {
             let p = if p.is_dir() {
                 p.join(
@@ -242,7 +356,7 @@ fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
             } else {
                 p.to_path_buf()
             };
-            Box::new(File::create(&p).with_context(|| format!("failed to create {}", p.display()))?)
+            Some(File::create(&p).with_context(|| format!("failed to create {}", p.display()))?)
         }
     };
     let fh = c.open(
@@ -253,14 +367,23 @@ fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
         },
     )?;
     let result = (|| -> Result<()> {
-        let mut off = 0u64;
-        loop {
-            let chunk = c.read(fh, off, MAX_IO)?;
-            if chunk.is_empty() {
-                return Ok(());
+        match file {
+            Some(mut f) => {
+                // Worth probing only when the guest reports fewer
+                // allocated blocks than the size implies.
+                if r.attr.blocks.saturating_mul(512) < r.attr.size && c.caps() & CAP_SEEK != 0 {
+                    match get_sparse(c, fh, r.attr.size, &mut f) {
+                        Err(e) if extents_unsupported(&e) => {}
+                        r => return r,
+                    }
+                }
+                pump_read(c, fh, &mut f)
             }
-            out.write_all(&chunk)?;
-            off += chunk.len() as u64;
+            None => {
+                let mut out = io::stdout().lock();
+                pump_read(c, fh, &mut out)?;
+                out.flush().map_err(Into::into)
+            }
         }
     })();
     let _ = c.release(fh);
@@ -269,20 +392,112 @@ fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
         e.downcast_ref::<io::Error>()
             .is_some_and(|e| e.kind() == io::ErrorKind::BrokenPipe)
     };
-    match result.and_then(|()| out.flush().map_err(Into::into)) {
+    match result {
         Err(e) if quiet_pipe(&e) => Ok(()),
         r => r,
     }
 }
 
+/// Data extents of a local file via `SEEK_DATA`/`SEEK_HOLE` — `None`
+/// when the platform can't report them (treat the file as dense).
+fn data_extents(f: &File, size: u64) -> Option<Vec<(u64, u64)>> {
+    let fd = f.as_raw_fd();
+    let mut out = Vec::new();
+    let mut pos = 0;
+    while pos < size {
+        // SAFETY: lseek on a live fd.
+        let d = unsafe { libc::lseek(fd, pos.min(i64::MAX as u64) as i64, libc::SEEK_DATA) };
+        if d < 0 {
+            match io::Error::last_os_error().raw_os_error() {
+                // The rest of the file is a hole.
+                Some(libc::ENXIO) => break,
+                _ => return None,
+            }
+        }
+        let d = d as u64;
+        if d >= size {
+            break;
+        }
+        // SAFETY: as above.
+        let h = unsafe { libc::lseek(fd, d.min(i64::MAX as u64) as i64, libc::SEEK_HOLE) };
+        if h < 0 {
+            return None;
+        }
+        out.push((d, (h as u64).min(size)));
+        pos = h as u64;
+    }
+    Some(out)
+}
+
+/// Write `f`'s data `extents` to `fh`, then size the file right —
+/// the guest file's holes stay unallocated.
+fn put_sparse(
+    c: &Client,
+    fh: u64,
+    node: NodeId,
+    f: &File,
+    size: u64,
+    extents: &[(u64, u64)],
+) -> Result<()> {
+    let mut buf = vec![0u8; MAX_IO as usize];
+    for &(d, h) in extents {
+        let mut off = d;
+        while off < h {
+            let n = f.read_at(&mut buf[..(h - off).min(MAX_IO as u64) as usize], off)?;
+            if n == 0 {
+                break;
+            }
+            let mut done = 0;
+            while done < n {
+                let w = c.write(fh, off + done as u64, &buf[done..n])? as usize;
+                if w == 0 {
+                    bail!("guest accepted no bytes");
+                }
+                done += w;
+            }
+            off += n as u64;
+        }
+    }
+    // A trailing hole carries no data — the size sets it.
+    c.setattr(
+        node,
+        SetAttr {
+            size: Some(size),
+            ..SetAttr::default()
+        },
+    )?;
+    Ok(())
+}
+
+/// Stream `input` to `fh` in `MAX_IO` chunks.
+fn pump_write(c: &Client, fh: u64, input: &mut impl Read) -> Result<()> {
+    let mut buf = vec![0u8; MAX_IO as usize];
+    let mut off = 0u64;
+    loop {
+        let n = input.read(&mut buf)?;
+        if n == 0 {
+            return Ok(());
+        }
+        let mut done = 0;
+        while done < n {
+            let w = c.write(fh, off, &buf[done..n])? as usize;
+            if w == 0 {
+                bail!("guest accepted no bytes");
+            }
+            done += w;
+            off += w as u64;
+        }
+    }
+}
+
 fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
     let stdin = src.as_os_str() == "-";
-    let (mut input, perm): (Box<dyn Read>, u32) = if stdin {
-        (Box::new(io::stdin().lock()), 0o644)
+    let (file, perm) = if stdin {
+        (None, 0o644)
     } else {
         let f = File::open(src).with_context(|| format!("failed to open {}", src.display()))?;
         let perm = f.metadata()?.permissions().mode() & 0o777;
-        (Box::new(f), perm)
+        (Some(f), perm)
     };
     // `cp` semantics: into an existing directory, keep the source name.
     let (parent, name) = match c.resolve(path.as_bytes(), true) {
@@ -304,7 +519,7 @@ fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
             (parent, base.as_bytes().to_vec())
         }
     };
-    let (_, _, fh) = c.create(
+    let (node, _, fh) = c.create(
         parent,
         &name,
         perm,
@@ -316,26 +531,57 @@ fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
         },
     )?;
     let result = (|| -> Result<()> {
-        let mut buf = vec![0u8; MAX_IO as usize];
-        let mut off = 0u64;
-        loop {
-            let n = input.read(&mut buf)?;
-            if n == 0 {
-                return Ok(c.fsync(fh)?);
-            }
-            let mut done = 0;
-            while done < n {
-                let w = c.write(fh, off, &buf[done..n])? as usize;
-                if w == 0 {
-                    bail!("guest accepted no bytes");
+        match &file {
+            None => pump_write(c, fh, &mut io::stdin().lock())?,
+            Some(f) => {
+                let m = f.metadata()?;
+                let size = m.len();
+                // Sparse only if the fs reports extents and there are
+                // fewer allocated blocks than the size implies.
+                let extents = (m.blocks().saturating_mul(512) < size)
+                    .then(|| data_extents(f, size))
+                    .flatten();
+                match extents {
+                    Some(e) => put_sparse(c, fh, node, f, size, &e)?,
+                    None => pump_write(c, fh, &mut &*f)?,
                 }
-                done += w;
-                off += w as u64;
             }
         }
+        Ok(c.fsync(fh)?)
     })();
     let _ = c.release(fh);
     result
+}
+
+/// `cp` — a guest-side copy: reflinked where the filesystem allows,
+/// hole-preserving otherwise, never a wire round trip. The destination
+/// must not exist (exclusive create).
+fn cp(c: &Client, src: &str, path: &str) -> Result<()> {
+    let r = c.resolve(src.as_bytes(), true)?;
+    match r.attr.kind {
+        FileKind::File => {}
+        FileKind::Dir => bail!("{} is a directory", display(&r.path)),
+        _ => bail!("{} is not a regular file", display(&r.path)),
+    }
+    // Same destination rules as `put`.
+    let (parent, name) = match c.resolve(path.as_bytes(), true) {
+        Ok(d) if d.attr.kind == FileKind::Dir => (
+            d.node,
+            r.path.last().map_or(&b"copy"[..], Vec::as_slice).to_vec(),
+        ),
+        _ => {
+            let trimmed = path.trim_end_matches('/');
+            let (dir, base) = trimmed.rsplit_once('/').unwrap_or(("", trimmed));
+            let parent = if dir.is_empty() {
+                ROOT
+            } else {
+                c.resolve(dir.as_bytes(), true)?.node
+            };
+            (parent, base.as_bytes().to_vec())
+        }
+    };
+    c.copy(r.node, parent, &name, 0).map(drop)?;
+    Ok(())
 }
 
 #[cfg(test)]

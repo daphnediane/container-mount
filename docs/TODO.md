@@ -41,8 +41,11 @@ shipped.
 - **inotify events → cache invalidation** — server places watches on
   read directories/open files and pushes `Event::Invalidate`
   ([protocol]); designed for macOS 27's `FSVolume.DataCacheHandler`.
-- **Later capabilities** — xattrs, `btime` (needs `statx`, blocked on
-  musl libc bindings), `Mknod` stays deliberately absent.
+- **Later capabilities** — `btime` (`statx` via `libc::syscall`; the
+  musl `libc` bindings don't expose the struct), BSD file flags
+  (`FS_IOC_*FLAGS` ↔ chflags; `HIDDEN` has no Linux analogue), ACL
+  mapping (POSIX ↔ NFSv4), advisory locks if FSKit surfaces them,
+  batch `Lookup` for deep paths. `Mknod` stays deliberately absent.
 - **Distro-to-distro mounts** — the `/mnt/wsl` analogue: a guest-side
   `distrofs mount` FUSE client spliced to a peer's server through a
   host broker. Design in container-distro's [host-file-access];

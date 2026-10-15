@@ -58,6 +58,45 @@ pub const RENAME_NOREPLACE: u32 = 1;
 /// `Rename` flag: atomically swap source and destination.
 pub const RENAME_EXCHANGE: u32 = 2;
 
+/// `Copy`/`CopyRange` flag: fail `EOPNOTSUPP` rather than fall back to
+/// an extent-by-extent copy when the filesystem can't share blocks.
+pub const COPY_REQUIRE_SHARED: u32 = 1;
+
+/// `Fallocate` mode bits. Wire values are our own — the server maps
+/// them onto `FALLOC_FL_*`, so they're stable across libc flavors.
+pub const FALLOC_KEEP_SIZE: u32 = 1;
+/// `Fallocate` mode: deallocate a range (must combine with
+/// [`FALLOC_KEEP_SIZE`]); the range reads back as zeros.
+pub const FALLOC_PUNCH_HOLE: u32 = 2;
+/// `Fallocate` mode: remove a range, shifting later data down.
+pub const FALLOC_COLLAPSE_RANGE: u32 = 4;
+/// `Fallocate` mode: zero a range, punching holes where possible.
+pub const FALLOC_ZERO_RANGE: u32 = 8;
+/// `Fallocate` mode: insert a hole, shifting later data up.
+pub const FALLOC_INSERT_RANGE: u32 = 16;
+/// `Fallocate` mode: make shared (reflinked) extents in a range
+/// private to this file.
+pub const FALLOC_UNSHARE_RANGE: u32 = 32;
+
+/// Longest xattr name the ops accept (Linux `XATTR_NAME_MAX`).
+pub const XATTR_NAME_MAX: usize = 255;
+/// Largest xattr value the ops accept (Linux `XATTR_SIZE_MAX`).
+pub const XATTR_VALUE_MAX: usize = 64 << 10;
+
+/// `ServerAuth.caps` bit: the server pushes [`Event`]s.
+pub const CAP_EVENTS: u64 = 1 << 0;
+/// `ServerAuth.caps` bit: `GetXattr`/`ListXattr`/`SetXattr`/
+/// `RemoveXattr` are implemented.
+pub const CAP_XATTR: u64 = 1 << 1;
+/// `ServerAuth.caps` bit: `Copy` and `CopyRange` are implemented.
+pub const CAP_COPY: u64 = 1 << 2;
+/// `ServerAuth.caps` bit: `Seek` (extent scanning) is implemented.
+pub const CAP_SEEK: u64 = 1 << 3;
+/// `ServerAuth.caps` bit: `Fallocate` is implemented.
+pub const CAP_FALLOCATE: u64 = 1 << 4;
+/// `ServerAuth.caps` bit: `FsyncDir` and `SyncFs` are implemented.
+pub const CAP_DIR_SYNC: u64 = 1 << 5;
+
 pub type NodeId = u64;
 pub type FileHandle = u64;
 pub type Nonce = [u8; 32];
@@ -71,16 +110,20 @@ impl Errno {
     pub const EPERM: Errno = Errno(1);
     pub const ENOENT: Errno = Errno(2);
     pub const EIO: Errno = Errno(5);
+    pub const ENXIO: Errno = Errno(6);
     pub const EBADF: Errno = Errno(9);
     pub const EACCES: Errno = Errno(13);
     pub const EEXIST: Errno = Errno(17);
+    pub const EXDEV: Errno = Errno(18);
     pub const ENOTDIR: Errno = Errno(20);
     pub const EISDIR: Errno = Errno(21);
     pub const EINVAL: Errno = Errno(22);
+    pub const ENOTTY: Errno = Errno(25);
     pub const EROFS: Errno = Errno(30);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOTEMPTY: Errno = Errno(39);
     pub const ELOOP: Errno = Errno(40);
+    pub const ENODATA: Errno = Errno(61);
     pub const EOPNOTSUPP: Errno = Errno(95);
     pub const ETIMEDOUT: Errno = Errno(110);
 
@@ -195,6 +238,18 @@ pub struct OpenFlags {
     pub append: bool,
 }
 
+/// `Seek` directions. Only the extent-scanning modes exist: `Read`/
+/// `Write` are positional, so there is no file position to move.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SeekWhence {
+    /// First data extent at or after `offset`; `ENXIO` if the rest of
+    /// the file is a hole (or `offset` is past the end).
+    Data,
+    /// First hole at or after `offset`; returns the file size when the
+    /// tail is all data.
+    Hole,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirEntry {
     pub name: Vec<u8>,
@@ -303,6 +358,79 @@ pub enum Op {
     StatFs {
         node: NodeId,
     },
+    /// Whole-file copy (`clonefileat` semantics): creates `dst_name`
+    /// under `dst_parent`, exclusive — `EEXIST` if the name is taken.
+    /// The copy shares extents (reflink) where the filesystem supports
+    /// it and otherwise copies data extents, preserving holes;
+    /// [`COPY_REQUIRE_SHARED`] fails `EOPNOTSUPP` instead of falling
+    /// back. Mode and times come from the source; the owner is the
+    /// provisioned user, like every host-created entry.
+    Copy {
+        src: NodeId,
+        dst_parent: NodeId,
+        dst_name: Vec<u8>,
+        flags: u32,
+    },
+    /// `copy_file_range` semantics between open handles: `len` bytes
+    /// from `src_fh`+`src_off` to `dst_fh`+`dst_off` (`len` 0 = to the
+    /// end of the source). Shares extents where possible and skips
+    /// holes; [`COPY_REQUIRE_SHARED`] requires sharing.
+    CopyRange {
+        src_fh: FileHandle,
+        src_off: u64,
+        dst_fh: FileHandle,
+        dst_off: u64,
+        len: u64,
+        flags: u32,
+    },
+    /// Extent scan (`SEEK_DATA`/`SEEK_HOLE`): the next boundary of the
+    /// `whence` kind at or after `offset`. `EOPNOTSUPP` means the
+    /// filesystem can't report extents — treat the file as dense.
+    Seek {
+        fh: FileHandle,
+        offset: u64,
+        whence: SeekWhence,
+    },
+    /// `fallocate(2)`: preallocate, punch holes, zero, collapse/insert
+    /// ranges — the `FALLOC_*` mode bits. A filesystem's refusal
+    /// surfaces as `EOPNOTSUPP`.
+    Fallocate {
+        fh: FileHandle,
+        mode: u32,
+        offset: u64,
+        len: u64,
+    },
+    /// fsync the directory itself — dentry/inode durability after a
+    /// create/rename, not the entries in it.
+    FsyncDir {
+        node: NodeId,
+    },
+    /// `syncfs(2)`: flush the whole filesystem hosting `node`.
+    SyncFs {
+        node: NodeId,
+    },
+    /// One xattr's value (`ENODATA` when unset). Symlinks refuse with
+    /// `EOPNOTSUPP` — a node fd can't reopen a link without following it.
+    GetXattr {
+        node: NodeId,
+        name: Vec<u8>,
+    },
+    /// Every xattr name on the node.
+    ListXattr {
+        node: NodeId,
+    },
+    /// `flags`: 0 sets, 1 is create-only (`EEXIST` if present), 2 is
+    /// replace-only (`ENODATA` if absent).
+    SetXattr {
+        node: NodeId,
+        name: Vec<u8>,
+        value: Vec<u8>,
+        flags: u32,
+    },
+    RemoveXattr {
+        node: NodeId,
+        name: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,6 +457,24 @@ pub enum Reply {
     },
     Target(Vec<u8>),
     StatFs(StatFs),
+    /// `Seek` result — the next boundary.
+    Offset(u64),
+    /// `Copy` result; `shared` reports whether the extents are shared
+    /// with the source.
+    Copied {
+        node: NodeId,
+        attr: Attr,
+        shared: bool,
+    },
+    /// `CopyRange` result — bytes copied and whether they're shared.
+    CopiedRange {
+        n: u64,
+        shared: bool,
+    },
+    /// `GetXattr` result.
+    Value(Vec<u8>),
+    /// `ListXattr` result.
+    Names(Vec<Vec<u8>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -382,7 +528,8 @@ pub struct ClientAuth {
 pub struct ServerAuth {
     /// [`server_mac`] over the client's nonce.
     pub mac: Mac,
-    /// Capability bits; none defined in v1.
+    /// Capability bits — which of the optional ops this server
+    /// implements (the `CAP_*` constants).
     pub caps: u64,
     pub root: Attr,
 }
@@ -562,6 +709,19 @@ mod tests {
                     mtime: Some(TimeSet::Now),
                     ..SetAttr::default()
                 },
+            },
+        };
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &req).unwrap();
+        assert_eq!(read_frame::<_, Request>(&mut &buf[..]).unwrap(), req);
+
+        let req = Request {
+            id: 2,
+            op: Op::Copy {
+                src: 1,
+                dst_parent: 1,
+                dst_name: b"x".to_vec(),
+                flags: COPY_REQUIRE_SHARED,
             },
         };
         let mut buf = Vec::new();

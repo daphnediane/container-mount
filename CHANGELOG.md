@@ -28,9 +28,18 @@ and audited against the commit log.
 - `tests/e2e.sh`: OCI-engine end-to-end test (Apple `container`,
   Podman, or Docker) exercising the full connect path without
   container-distro.
+- Optional protocol ops, advertised via `ServerAuth` capability bits:
+  `Copy`/`CopyRange` (server-side copies — reflinked where the
+  filesystem allows, hole-preserving extent copies elsewhere),
+  `Seek` (`SEEK_DATA`/`SEEK_HOLE` scans), `Fallocate` (preallocate,
+  punch hole, zero/collapse/insert ranges), `FsyncDir`/`SyncFs`, and
+  xattr get/set/list/remove.
+- `cp` command — guest-side file copies without a wire round trip.
+- `get`/`put` preserve sparse files end to end: only data extents
+  cross the wire and holes stay unallocated on both sides.
 - Release packaging: `scripts/build-pkg.sh` produces the macOS `.pkg`,
   the binstall client tarball, and the `distrofs-servers` bundle;
   `build-pkg-signed.sh` (Developer ID via gitignored
   `packaging/signing.local.conf`), `build-servers.sh`,
   `install-local.sh`, `dev-clean.sh`; design docs in
-  `docs/design/{protocol,security,packaging,release}.md`.
+  `docs/design/{protocol,security,filesystems,packaging,release}.md`.

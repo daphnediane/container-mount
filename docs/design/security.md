@@ -66,7 +66,17 @@ it:
   client.
 - virtiofs/pseudo filesystems (`proc`, `sysfs`, `devtmpfs`,
   `virtiofs`, …) present as empty read-only directories — the server
-  must not serve host shares back to the host.
+  must not serve host shares back to the host. Hidden mountpoints
+  likewise refuse writes (`EROFS`) and present no xattrs.
+- Optional ops (`Copy`/`CopyRange`/`Seek`/`Fallocate`/xattrs) act only
+  through `O_PATH` node fds and per-connection file handles — same
+  confinement as the base ops, no paths. `Copy` creates exclusively
+  (`EEXIST`); a partial copy is unlinked before the error returns.
+- xattrs pass all namespaces through, including `trusted.*` and
+  `security.*` — they're file content, and the server is guest root
+  anyway. The host treats *values* as guest-controlled, like file
+  data; mapping guest names onto host-reserved `com.apple.*` attrs is
+  a host-side policy decision, not a passthrough.
 
 ## Release/download integrity
 

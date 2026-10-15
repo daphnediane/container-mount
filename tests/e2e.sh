@@ -54,14 +54,12 @@ TARGET="$ARCH-unknown-linux-musl"
 
 SERVER="target/$TARGET/release/distrofs"
 CLIENT="target/debug/distrofs"
-if [ ! -x "$SERVER" ]; then
-    log "building $TARGET server"
-    cargo build --release --target "$TARGET" >/dev/null
-fi
-if [ ! -x "$CLIENT" ]; then
-    log "building host client"
-    cargo build >/dev/null
-fi
+# Always hand the builds to cargo — it no-ops on fresh sources and a
+# stale binary here costs a debugging session.
+log "building $TARGET server and host client"
+cargo build --release --target "$TARGET" >/dev/null
+cargo build >/dev/null
+[ -x "$SERVER" ] && [ -x "$CLIENT" ] || die "builds missing"
 
 NAME="distrofs-e2e-$$"
 TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
@@ -142,6 +140,26 @@ echo "host-payload" > "$SCRATCH/up.txt"
 t cli put "$SCRATCH/up.txt" /up.txt
 guest 'grep -q host-payload /up.txt' && log "PASS put-visible-in-guest" \
     || { log "FAIL put-visible-in-guest"; fail=1; }
+
+# Guest-side copy lands in the guest without a wire round trip.
+t cli cp /marker.txt /marker-copy.txt
+guest 'grep -q e2e-payload /marker-copy.txt' \
+    && log "PASS cp-visible-in-guest" || { log "FAIL cp-visible-in-guest"; fail=1; }
+
+# Sparse files stay sparse in both directions: an 8 MiB file with a
+# few bytes of data should land with ~tens of 512-blocks, not ~16k.
+guest 'echo sparse-mark > /sparse.bin && truncate -s 8M /sparse.bin'
+t cli get /sparse.bin "$SCRATCH/sparse.bin"
+sz=$(stat -f%z "$SCRATCH/sparse.bin"); bl=$(stat -f%b "$SCRATCH/sparse.bin")
+if [ "$sz" = 8388608 ] && [ "$bl" -lt 8192 ]; then
+    log "PASS sparse get ($bl blocks)"
+else
+    log "FAIL sparse get (size=$sz blocks=$bl)"; fail=1
+fi
+t cli put "$SCRATCH/sparse.bin" /sparse2.bin
+guest 's=$(stat -c%s /sparse2.bin); b=$(stat -c%b /sparse2.bin);
+   [ "$s" = 8388608 ] && [ "$b" -lt 8192 ] && grep -q sparse-mark /sparse2.bin' \
+    && log "PASS sparse put" || { log "FAIL sparse put"; fail=1; }
 
 # Symlink confinement: targets must stay relative and inside the root.
 out="$(cli stat /sub/inside-link)"

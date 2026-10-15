@@ -70,6 +70,177 @@ fn proc_path(fd: RawFd) -> CString {
     CString::new(format!("/proc/self/fd/{fd}")).unwrap_or_default()
 }
 
+// The clone ioctls aren't in the `libc` crate's musl bindings; the
+// numbers are asm-generic, so they're stable across arches.
+const FICLONE: libc::Ioctl = 0x4004_9409;
+const FICLONERANGE: libc::Ioctl = 0x4020_940D;
+
+#[repr(C)]
+struct FileCloneRange {
+    src_fd: i64,
+    src_offset: u64,
+    src_length: u64,
+    dest_offset: u64,
+}
+
+fn lseek(fd: RawFd, off: u64, whence: libc::c_int) -> R<u64> {
+    // SAFETY: off is clamped to off_t's range.
+    let r = unsafe { libc::lseek(fd, off.min(i64::MAX as u64) as libc::off_t, whence) };
+    if r < 0 {
+        Err(last_errno())
+    } else {
+        Ok(r as u64)
+    }
+}
+
+/// One `copy_file_range` call — a raw syscall so the answer doesn't
+/// depend on the libc flavor's wrapper or its kernel-emulation quirks.
+/// Advances `*src_off`/`*dst_off` by what it copied.
+fn cfr(src: RawFd, src_off: &mut u64, dst: RawFd, dst_off: &mut u64, len: u64) -> R<u64> {
+    let (mut a, mut b) = (*src_off as libc::loff_t, *dst_off as libc::loff_t);
+    // SAFETY: `a`/`b` are valid in/out offset pointers.
+    let n = unsafe {
+        libc::syscall(
+            libc::SYS_copy_file_range,
+            src,
+            &mut a,
+            dst,
+            &mut b,
+            len.min(usize::MAX as u64) as usize,
+            0,
+        )
+    };
+    if n < 0 {
+        return Err(last_errno());
+    }
+    *src_off = a as u64;
+    *dst_off = b as u64;
+    Ok(n as u64)
+}
+
+/// Copy the range `[pos, pos+len)` from `src` to `dst` at `dpos`,
+/// skipping holes so a sparse source stays sparse. Returns `EINVAL`
+/// when the filesystem can't report extents — the caller retries with
+/// a dense copy. Returns the whole `len` on success (skipped holes
+/// count: they copied as holes).
+fn copy_extents(src: RawFd, mut pos: u64, dst: RawFd, mut dpos: u64, len: u64) -> R<u64> {
+    let stop = pos + len;
+    while pos < stop {
+        let start = match lseek(src, pos, libc::SEEK_DATA) {
+            Err(Errno::ENXIO) => break,
+            r => r?,
+        };
+        if start >= stop {
+            break;
+        }
+        let end = lseek(src, start, libc::SEEK_HOLE)?.min(stop);
+        dpos += start - pos;
+        let mut cur = start;
+        while cur < end {
+            let want = end - cur;
+            if cfr(src, &mut cur, dst, &mut dpos, want)? == 0 {
+                break;
+            }
+        }
+        pos = end;
+    }
+    Ok(len)
+}
+
+/// `copy_file_range` between two open files: shared extents where the
+/// filesystem does it itself, hole-skipping copies elsewhere. `len` 0
+/// means to the end of the source. Returns `(bytes covered, shared)`.
+fn copy_range(
+    src: &File,
+    src_off: u64,
+    dst: &File,
+    dst_off: u64,
+    len: u64,
+    require_shared: bool,
+) -> R<(u64, bool)> {
+    let st = fstat(src.as_raw_fd())?;
+    if FileKind::from_mode(st.st_mode) != Some(FileKind::File) {
+        return Err(Errno::EINVAL);
+    }
+    let size = st.st_size.max(0) as u64;
+    let avail = size.saturating_sub(src_off);
+    let len = if len == 0 { avail } else { len.min(avail) };
+    if len == 0 {
+        return Ok((0, false));
+    }
+    if require_shared {
+        let range = FileCloneRange {
+            src_fd: src.as_raw_fd() as i64,
+            src_offset: src_off,
+            src_length: len,
+            dest_offset: dst_off,
+        };
+        // SAFETY: `range` is valid; the ioctl is all-or-nothing.
+        cvt(unsafe { libc::ioctl(dst.as_raw_fd(), FICLONERANGE, &range) })?;
+        return Ok((len, true));
+    }
+    match copy_extents(src.as_raw_fd(), src_off, dst.as_raw_fd(), dst_off, len) {
+        Err(Errno::EINVAL) => {}
+        r => return r.map(|n| (n, false)),
+    }
+    // Dense fallback — the fs can't report extents.
+    let (mut so, mut dof) = (src_off, dst_off);
+    let mut done = 0;
+    while done < len {
+        match cfr(
+            src.as_raw_fd(),
+            &mut so,
+            dst.as_raw_fd(),
+            &mut dof,
+            len - done,
+        ) {
+            Ok(0) => break,
+            Ok(n) => done += n,
+            Err(Errno(4)) => {} // EINTR
+            Err(e) => return Err(e),
+        }
+    }
+    Ok((done, false))
+}
+
+/// Our wire `FALLOC_*` bits to the kernel's `FALLOC_FL_*`.
+fn falloc_mode(m: u32) -> R<libc::c_int> {
+    const KNOWN: u32 = FALLOC_KEEP_SIZE
+        | FALLOC_PUNCH_HOLE
+        | FALLOC_COLLAPSE_RANGE
+        | FALLOC_ZERO_RANGE
+        | FALLOC_INSERT_RANGE
+        | FALLOC_UNSHARE_RANGE;
+    if m & !KNOWN != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let mut out = 0;
+    for (bit, c) in [
+        (FALLOC_KEEP_SIZE, libc::FALLOC_FL_KEEP_SIZE),
+        (FALLOC_PUNCH_HOLE, libc::FALLOC_FL_PUNCH_HOLE),
+        (FALLOC_COLLAPSE_RANGE, libc::FALLOC_FL_COLLAPSE_RANGE),
+        (FALLOC_ZERO_RANGE, libc::FALLOC_FL_ZERO_RANGE),
+        (FALLOC_INSERT_RANGE, libc::FALLOC_FL_INSERT_RANGE),
+        (FALLOC_UNSHARE_RANGE, libc::FALLOC_FL_UNSHARE_RANGE),
+    ] {
+        if m & bit != 0 {
+            out |= c;
+        }
+    }
+    Ok(out)
+}
+
+fn xname(name: &[u8]) -> R<CString> {
+    if name.is_empty() || name.len() > XATTR_NAME_MAX {
+        return Err(if name.len() > XATTR_NAME_MAX {
+            Errno::ENAMETOOLONG
+        } else {
+            Errno::EINVAL
+        });
+    }
+    CString::new(name).map_err(|_| Errno::EINVAL)
+}
+
 fn openat(dirfd: RawFd, name: &CStr, flags: libc::c_int, mode: libc::mode_t) -> R<OwnedFd> {
     // SAFETY: `name` is NUL-terminated; a non-negative return is a fresh fd we own.
     let fd = cvt(unsafe { libc::openat(dirfd, name.as_ptr(), flags | libc::O_CLOEXEC, mode) })?;
@@ -519,6 +690,139 @@ impl Conn {
                     namemax: s.f_namelen as u32,
                 }))
             }
+            Op::Copy {
+                src,
+                dst_parent,
+                dst_name,
+                flags,
+            } => self.copy(src, dst_parent, &dst_name, flags),
+            Op::CopyRange {
+                src_fh,
+                src_off,
+                dst_fh,
+                dst_off,
+                len,
+                flags,
+            } => {
+                if flags & !COPY_REQUIRE_SHARED != 0 {
+                    return Err(Errno::EINVAL);
+                }
+                let (s, d) = (self.file(src_fh)?, self.file(dst_fh)?);
+                let (n, shared) = copy_range(
+                    &s,
+                    src_off,
+                    &d,
+                    dst_off,
+                    len,
+                    flags & COPY_REQUIRE_SHARED != 0,
+                )?;
+                Ok(Reply::CopiedRange { n, shared })
+            }
+            Op::Seek { fh, offset, whence } => {
+                let f = self.file(fh)?;
+                let w = match whence {
+                    SeekWhence::Data => libc::SEEK_DATA,
+                    SeekWhence::Hole => libc::SEEK_HOLE,
+                };
+                match lseek(f.as_raw_fd(), offset, w) {
+                    // EINVAL here means the fs can't report extents.
+                    Err(Errno::EINVAL) => Err(Errno::EOPNOTSUPP),
+                    r => r.map(Reply::Offset),
+                }
+            }
+            Op::Fallocate {
+                fh,
+                mode,
+                offset,
+                len,
+            } => {
+                let f = self.file(fh)?;
+                // SAFETY: args are a live fd and clamped off_t values.
+                let rc = unsafe {
+                    libc::syscall(
+                        libc::SYS_fallocate,
+                        f.as_raw_fd(),
+                        falloc_mode(mode)?,
+                        offset.min(i64::MAX as u64) as i64,
+                        len.min(i64::MAX as u64) as i64,
+                    )
+                };
+                if rc < 0 {
+                    return Err(last_errno());
+                }
+                Ok(Reply::Ok)
+            }
+            Op::FsyncDir { node } => {
+                let n = self.node(node)?;
+                let fd = openat(n.raw(), c".", libc::O_RDONLY | libc::O_DIRECTORY, 0)?;
+                File::from(fd).sync_all().map_err(|e| io_errno(&e))?;
+                Ok(Reply::Ok)
+            }
+            Op::SyncFs { node } => {
+                let n = self.node(node)?;
+                // syncfs wants a real fd; the node's is O_PATH.
+                let f = File::from(openat(
+                    libc::AT_FDCWD,
+                    &proc_path(n.raw()),
+                    libc::O_RDONLY | libc::O_NOCTTY,
+                    0,
+                )?);
+                // SAFETY: `f` is live.
+                if unsafe { libc::syscall(libc::SYS_syncfs, f.as_raw_fd()) } < 0 {
+                    return Err(last_errno());
+                }
+                Ok(Reply::Ok)
+            }
+            Op::GetXattr { node, name } => {
+                let n = self.node(node)?;
+                // A hidden mountpoint presents as an empty dir.
+                if n.hidden {
+                    return Err(Errno::ENODATA);
+                }
+                self.get_xattr(&n, &name)
+            }
+            Op::ListXattr { node } => {
+                let n = self.node(node)?;
+                if n.hidden {
+                    return Ok(Reply::Names(Vec::new()));
+                }
+                self.list_xattr(&n)
+            }
+            Op::SetXattr {
+                node,
+                name,
+                value,
+                flags,
+            } => {
+                let n = self.node(node)?.writable()?;
+                if value.len() > XATTR_VALUE_MAX || flags > 2 {
+                    return Err(Errno::EINVAL);
+                }
+                let f = self.xattr_fd(&n)?;
+                let xflags = match flags {
+                    0 => 0,
+                    1 => libc::XATTR_CREATE,
+                    _ => libc::XATTR_REPLACE,
+                };
+                // SAFETY: name/value are valid buffers for their lengths.
+                cvt(unsafe {
+                    libc::fsetxattr(
+                        f.as_raw_fd(),
+                        xname(&name)?.as_ptr(),
+                        value.as_ptr().cast(),
+                        value.len(),
+                        xflags,
+                    )
+                })?;
+                Ok(Reply::Ok)
+            }
+            Op::RemoveXattr { node, name } => {
+                let n = self.node(node)?.writable()?;
+                let f = self.xattr_fd(&n)?;
+                // SAFETY: name is NUL-terminated; the fd is live.
+                cvt(unsafe { libc::fremovexattr(f.as_raw_fd(), xname(&name)?.as_ptr()) })?;
+                Ok(Reply::Ok)
+            }
         }
     }
 
@@ -528,6 +832,157 @@ impl Conn {
         // SAFETY: `c` is NUL-terminated; parent fd is live.
         cvt(unsafe { libc::unlinkat(p.raw(), c.as_ptr(), flags) })?;
         Ok(Reply::Ok)
+    }
+
+    /// Whole-file copy into a fresh exclusive dentry; on any error the
+    /// partial destination is unlinked.
+    fn copy(&self, src: NodeId, dst_parent: NodeId, dst_name: &[u8], flags: u32) -> R<Reply> {
+        if flags & !COPY_REQUIRE_SHARED != 0 {
+            return Err(Errno::EINVAL);
+        }
+        let s = self.node(src)?;
+        let p = self.node(dst_parent)?.writable()?;
+        let c = cname(dst_name)?;
+        let st = fstat(s.raw())?;
+        if FileKind::from_mode(st.st_mode) != Some(FileKind::File) {
+            return Err(Errno::EINVAL);
+        }
+        let df = File::from(openat(
+            p.raw(),
+            &c,
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_NOCTTY,
+            st.st_mode & 0o7777,
+        )?);
+        match self.copy_fill(&s, &df, &st, flags) {
+            Err(e) => {
+                // SAFETY: best-effort removal of the partial copy.
+                unsafe { libc::unlinkat(p.raw(), c.as_ptr(), 0) };
+                Err(e)
+            }
+            Ok(shared) => {
+                self.chown_new(&p, &c)?;
+                let (node, attr) = self.lookup_fd(&p, &c)?;
+                Ok(Reply::Copied { node, attr, shared })
+            }
+        }
+    }
+
+    /// Populate the fresh `df` from `s`'s inode — reflink where the fs
+    /// allows, else an extent copy — then take the source's times.
+    fn copy_fill(&self, s: &NodeRef, df: &File, st: &libc::stat, flags: u32) -> R<bool> {
+        // Reopen the inode the O_PATH fd pins, not a path.
+        let sf = File::from(openat(
+            libc::AT_FDCWD,
+            &proc_path(s.raw()),
+            libc::O_RDONLY | libc::O_NOCTTY,
+            0,
+        )?);
+        // SAFETY: both are live fds of regular files.
+        let rc = unsafe { libc::ioctl(df.as_raw_fd(), FICLONE, sf.as_raw_fd()) };
+        let shared = if rc == 0 {
+            true
+        } else {
+            let e = last_errno();
+            let try_copy = matches!(
+                e,
+                Errno::EINVAL | Errno::EOPNOTSUPP | Errno::ENOTTY | Errno::EXDEV
+            );
+            if !try_copy || flags & COPY_REQUIRE_SHARED != 0 {
+                return Err(if try_copy { Errno::EOPNOTSUPP } else { e });
+            }
+            copy_range(&sf, 0, df, 0, st.st_size.max(0) as u64, false)?;
+            false
+        };
+        let times = [
+            libc::timespec {
+                tv_sec: st.st_atime,
+                tv_nsec: st.st_atime_nsec,
+            },
+            libc::timespec {
+                tv_sec: st.st_mtime,
+                tv_nsec: st.st_mtime_nsec,
+            },
+        ];
+        // SAFETY: the proc path resolves to `df`'s inode; `times` has
+        // both entries.
+        cvt(unsafe {
+            libc::utimensat(
+                libc::AT_FDCWD,
+                proc_path(df.as_raw_fd()).as_ptr(),
+                times.as_ptr(),
+                0,
+            )
+        })?;
+        Ok(shared)
+    }
+
+    /// A real fd for `f*xattr` on a node — `O_PATH` fds can't carry
+    /// them. `O_NONBLOCK` keeps a FIFO node from hanging on open.
+    /// Symlinks refuse: a proc-path reopen would follow to the target.
+    fn xattr_fd(&self, n: &NodeRef) -> R<File> {
+        if FileKind::from_mode(fstat(n.raw())?.st_mode) == Some(FileKind::Symlink) {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        openat(
+            libc::AT_FDCWD,
+            &proc_path(n.raw()),
+            libc::O_RDONLY | libc::O_NONBLOCK | libc::O_NOCTTY,
+            0,
+        )
+        .map(File::from)
+    }
+
+    fn get_xattr(&self, n: &NodeRef, name: &[u8]) -> R<Reply> {
+        let f = self.xattr_fd(n)?;
+        let name = xname(name)?;
+        // SAFETY: name is NUL-terminated; null/0 is a size query.
+        let sz = unsafe { libc::fgetxattr(f.as_raw_fd(), name.as_ptr(), std::ptr::null_mut(), 0) };
+        if sz < 0 {
+            return Err(last_errno());
+        }
+        if sz as usize > XATTR_VALUE_MAX {
+            return Err(Errno::EIO);
+        }
+        let mut buf = vec![0u8; sz as usize];
+        // SAFETY: `buf` is writable for its length.
+        let n2 = unsafe {
+            libc::fgetxattr(
+                f.as_raw_fd(),
+                name.as_ptr(),
+                buf.as_mut_ptr().cast(),
+                sz as usize,
+            )
+        };
+        if n2 < 0 {
+            return Err(last_errno());
+        }
+        buf.truncate(n2 as usize);
+        Ok(Reply::Value(buf))
+    }
+
+    fn list_xattr(&self, n: &NodeRef) -> R<Reply> {
+        let f = self.xattr_fd(n)?;
+        // SAFETY: null/0 is a size query.
+        let sz = unsafe { libc::flistxattr(f.as_raw_fd(), std::ptr::null_mut(), 0) };
+        if sz < 0 {
+            return Err(last_errno());
+        }
+        if sz as usize > 4 * XATTR_VALUE_MAX {
+            return Err(Errno::EIO);
+        }
+        let mut buf = vec![0u8; sz as usize];
+        // SAFETY: `buf` is writable for its length.
+        let n2 = unsafe { libc::flistxattr(f.as_raw_fd(), buf.as_mut_ptr().cast(), sz as usize) };
+        if n2 < 0 {
+            return Err(last_errno());
+        }
+        buf.truncate(n2 as usize);
+        Ok(Reply::Names(
+            buf.split(|&b| b == 0)
+                .filter(|s| !s.is_empty())
+                .map(<[u8]>::to_vec)
+                .collect(),
+        ))
     }
 
     fn create(
@@ -767,7 +1222,7 @@ fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<()> {
         &mut s,
         &ServerAuth {
             mac: server_mac(token, &auth.nonce),
-            caps: 0,
+            caps: CAP_XATTR | CAP_COPY | CAP_SEEK | CAP_FALLOCATE | CAP_DIR_SYNC,
             root,
         },
     )?;

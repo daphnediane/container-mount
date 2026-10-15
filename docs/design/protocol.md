@@ -1,7 +1,8 @@
 # Protocol and transport
 
 The wire protocol, transports, and client-side validation distrofs
-implements. Companion to [security.md](security.md) (threat model).
+implements. Companion to [security.md](security.md) (threat model) and
+[filesystems.md](filesystems.md) (observed host/guest fs behavior).
 The deploying side of the integration — how container-distro starts
 the server, picks socket paths, and supplies tokens — is in
 container-distro's
@@ -101,13 +102,68 @@ attributes (stateless — the server reopens the directory and
 `seekdir`s to the cookie), `Open`, `Read`, `Write`, `Fsync`,
 `Release`, `Create`, `Mkdir`, `Unlink`, `Rmdir`, `Rename { flags }`
 (`RENAME_NOREPLACE`/`EXCHANGE`), `Symlink`, `ReadLink`, `Link`,
-`StatFs`. Xattrs are deferred to a later capability (appended ops);
-`Mknod` is deliberately absent.
+`StatFs`. `Mknod` is deliberately absent.
+
+**Optional ops** are gated by `ServerAuth.caps`; a v1 peer drops the
+connection on an op it can't decode, so the client checks the bit
+(`Client::need` → `EOPNOTSUPP`) before sending. Enum variants encode
+by position — append, never reorder — and postcard can't extend a
+struct once shipped, so a new field on `Attr`/`SetAttr`/`StatFs`/
+`OpenFlags` means a *new* op or struct, not an edited one.
+
+| cap             | ops                                                |
+| --------------- | -------------------------------------------------- |
+| `CAP_COPY`      | `Copy`, `CopyRange`                                |
+| `CAP_SEEK`      | `Seek`                                             |
+| `CAP_FALLOCATE` | `Fallocate`                                        |
+| `CAP_DIR_SYNC`  | `FsyncDir`, `SyncFs`                               |
+| `CAP_XATTR`     | `GetXattr`, `ListXattr`, `SetXattr`, `RemoveXattr` |
+| `CAP_EVENTS`    | `Event` pushes (planned)                           |
+
+**Copying.** `Copy` is whole-file (`clonefileat` semantics): an
+exclusive create under `dst_parent` (`EEXIST` if taken), mode/times
+from the source, owner is the provisioned user like every host-created
+entry. `CopyRange` is `copy_file_range` between open handles. Ops are
+named for the contract, not the mechanism: data is reflinked
+(`FICLONE`/`FICLONERANGE`) where the filesystem supports it and copied
+extent-by-extent otherwise — skipping holes, so a sparse source never
+materializes as allocated zeros. `COPY_REQUIRE_SHARED` fails
+`EOPNOTSUPP` instead of falling back, for callers that need sharing
+itself. Replies report `shared` so a caller can see which happened.
+
+**Sparse files.** `Seek { fh, offset, whence: Data|Hole }` is
+`SEEK_DATA`/`SEEK_HOLE`: `ENXIO` means the rest of the file is a hole,
+`EOPNOTSUPP` means the fs can't report extents (treat it as dense).
+`Fallocate` takes the wire `FALLOC_*` mode bits (the server maps them
+to `FALLOC_FL_*`): preallocate, `PUNCH_HOLE` — with `KEEP_SIZE` —
+deallocates a range back to zeros, plus `ZERO_RANGE`,
+`COLLAPSE`/`INSERT_RANGE`, `UNSHARE`. Detection needs no op:
+`attr.blocks * 512 < attr.size`. `SetAttr.size` + positional `Write`
+always covered hole *creation*; what's new is hole *discovery* and
+*deallocation*. `get`/`put` already ride on this — a sparse file moves
+only its extents and stays sparse on both ends. One host-side wrinkle:
+APFS allocates the flushed gaps of an extended file rather than
+leaving them sparse, so `get` additionally `F_PUNCHHOLE`s the hole
+ranges before close ([filesystems.md](filesystems.md) has the full
+measurements).
+
+**Xattrs** (`CAP_XATTR`) map to `f*xattr` on a real fd reopened
+through `/proc/self/fd` (`O_PATH` fds can't carry them; `O_NONBLOCK`
+keeps a FIFO node from hanging). Names ≤ 255 bytes, values ≤ 64 KiB;
+all namespaces pass through. Symlinks refuse `EOPNOTSUPP` — a
+proc-path reopen would follow the link. `SetXattr` flags: 0 set,
+1 create-only, 2 replace-only. Hidden mountpoints present as having no
+xattrs. These exist chiefly for the FSKit front-end, where macOS
+writes `com.apple.*` attrs on every Finder copy.
+
+**Durability.** `FsyncDir` fsyncs a directory's own metadata so
+create/rename dentries are durable; `SyncFs` is `syncfs` on the
+filesystem hosting the node.
 
 **Attributes.** `ino, kind, perm, nlink, uid, gid, rdev, size, blocks,
 blksize, atime, mtime, ctime` from `fstat` on the node fd. `btime`
-needs `statx`, which the musl `libc` bindings don't expose yet — a
-later capability.
+needs `statx` — the musl `libc` bindings don't expose the struct, so
+it goes through `libc::syscall` when it lands; a later capability.
 
 **Errors.** The wire carries Linux errno *values* as a documented
 enum. The host maps them to Darwin numbers, which differ (`ENOTEMPTY`
@@ -119,9 +175,15 @@ directories the client has read and files it has open, and pushes
 inotify exhaustion (`max_user_watches`) it says so once and the host
 falls back to short TTL caching.
 
-**Versioning.** Each side sends its version in the handshake; v1
-servers reject other majors. Capability bits in `ServerAuth` gate
-optional features (events, xattrs, `btime`).
+**For the FSKit front-end.** The optional ops exist to serve macOS:
+`clonefile`/Finder copy → `Copy`, `SEEK_DATA`/`SEEK_HOLE` and
+hole-aware reads → `Seek`, `F_ALLOCATE*`/`fpunchhole` fcntls →
+`Fallocate`, `com.apple.*` xattrs (quarantine, FinderInfo,
+ResourceFork) → the xattr ops, directory fsync → `FsyncDir`. Still
+deferred, as further capabilities: `btime` (`statx`), BSD file flags
+(`FS_IOC_*FLAGS` ↔ chflags — `UF_IMMUTABLE`/`APPEND` map naturally,
+`HIDDEN` doesn't), POSIX-ACL ↔ NFSv4-ACL mapping, and advisory locks
+if FSKit surfaces them.
 
 ## Guest server behavior
 

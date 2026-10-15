@@ -59,6 +59,7 @@ usage: distrofs [--dev] [--timeout SECS]
   stat       show one guest entry's attributes (-L follows the link)
   get        copy a guest file out (DEST or `-`/omitted for stdout)
   put        copy a host file in (SRC `-` reads stdin)
+  cp         copy a guest file inside the guest (reflink when possible)
   check      verify transport, peer, and the session handshake
   socket-path KEY   print a managed private host socket path for KEY
   servers    list known guest server binaries (-v shows search paths)
@@ -205,7 +206,7 @@ fn real_main() -> Result<()> {
         "server-path" => server_path(&rest[1..], o.dev),
         "fetch-servers" => update::fetch_servers(&rest[1..], o.dev),
         "update" => update::run(&rest[1..], o.dev),
-        "ls" | "stat" | "get" | "put" | "check" => {
+        "ls" | "stat" | "get" | "put" | "cp" | "check" => {
             let (c, via) = connect_client(&o)?;
             fscli::run(cmd, &rest[1..], &c, &via, o.peer_requirement.is_some())
         }

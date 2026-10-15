@@ -100,6 +100,11 @@ fn reply_name(r: &Reply) -> &'static str {
         Reply::Created { .. } => "Created",
         Reply::Target(_) => "Target",
         Reply::StatFs(_) => "StatFs",
+        Reply::Offset(_) => "Offset",
+        Reply::Copied { .. } => "Copied",
+        Reply::CopiedRange { .. } => "CopiedRange",
+        Reply::Value(_) => "Value",
+        Reply::Names(_) => "Names",
     }
 }
 
@@ -140,6 +145,7 @@ pub struct Client {
     pending: Arc<Mutex<Pending>>,
     next_id: AtomicU64,
     root: Attr,
+    caps: u64,
 }
 
 impl Client {
@@ -207,12 +213,29 @@ impl Client {
             pending,
             next_id: AtomicU64::new(1),
             root: auth.root,
+            caps: auth.caps,
         })
     }
 
     #[must_use]
     pub fn root_attr(&self) -> &Attr {
         &self.root
+    }
+
+    /// The optional-op bits the server advertised ([`CAP_*`] constants).
+    #[must_use]
+    pub fn caps(&self) -> u64 {
+        self.caps
+    }
+
+    /// `EOPNOTSUPP` without a round trip when the server lacks `bit` —
+    /// a v1 peer would drop the connection on an op it can't decode.
+    fn need(&self, bit: u64) -> Result<()> {
+        if self.caps & bit != 0 {
+            Ok(())
+        } else {
+            Err(Error::Guest(Errno::EOPNOTSUPP))
+        }
     }
 
     /// Send one operation and wait for its reply.
@@ -497,6 +520,154 @@ impl Client {
             Reply::StatFs(s) => Ok(s),
             r => Err(unexpected(&r)),
         }
+    }
+
+    /// Server-side copy of `src` to a new `dst_name` under `dst_parent`
+    /// (exclusive). Returns the new node, its attributes, and whether
+    /// the extents are shared. See [`Op::Copy`].
+    pub fn copy(
+        &self,
+        src: NodeId,
+        dst_parent: NodeId,
+        dst_name: &[u8],
+        flags: u32,
+    ) -> Result<(NodeId, Attr, bool)> {
+        check_name(dst_name)?;
+        self.need(CAP_COPY)?;
+        match self.call(Op::Copy {
+            src,
+            dst_parent,
+            dst_name: dst_name.to_vec(),
+            flags,
+        })? {
+            Reply::Copied { node, attr, shared } => Ok((node, attr, shared)),
+            r => Err(unexpected(&r)),
+        }
+    }
+
+    /// `copy_file_range` between open handles; `(bytes, shared)`. See
+    /// [`Op::CopyRange`].
+    pub fn copy_range(
+        &self,
+        src_fh: FileHandle,
+        src_off: u64,
+        dst_fh: FileHandle,
+        dst_off: u64,
+        len: u64,
+        flags: u32,
+    ) -> Result<(u64, bool)> {
+        self.need(CAP_COPY)?;
+        match self.call(Op::CopyRange {
+            src_fh,
+            src_off,
+            dst_fh,
+            dst_off,
+            len,
+            flags,
+        })? {
+            Reply::CopiedRange { n, shared } => Ok((n, shared)),
+            r => Err(unexpected(&r)),
+        }
+    }
+
+    /// The next data/hole boundary on an open file — a guest
+    /// `ENXIO`/`EOPNOTSUPP` surfaces as [`Error::Guest`]. See [`Op::Seek`].
+    pub fn seek(&self, fh: FileHandle, offset: u64, whence: SeekWhence) -> Result<u64> {
+        self.need(CAP_SEEK)?;
+        match self.call(Op::Seek { fh, offset, whence })? {
+            Reply::Offset(o) => Ok(o),
+            r => Err(unexpected(&r)),
+        }
+    }
+
+    /// `fallocate(2)` on an open file — `FALLOC_*` mode bits.
+    pub fn fallocate(&self, fh: FileHandle, mode: u32, offset: u64, len: u64) -> Result<()> {
+        self.need(CAP_FALLOCATE)?;
+        self.call(Op::Fallocate {
+            fh,
+            mode,
+            offset,
+            len,
+        })
+        .map(drop)
+    }
+
+    /// fsync a directory's own metadata.
+    pub fn fsync_dir(&self, node: NodeId) -> Result<()> {
+        self.need(CAP_DIR_SYNC)?;
+        self.call(Op::FsyncDir { node }).map(drop)
+    }
+
+    /// Flush the filesystem hosting `node`.
+    pub fn syncfs(&self, node: NodeId) -> Result<()> {
+        self.need(CAP_DIR_SYNC)?;
+        self.call(Op::SyncFs { node }).map(drop)
+    }
+
+    fn xattr_name(name: &[u8]) -> Result<()> {
+        if name.is_empty() || name.len() > XATTR_NAME_MAX || name.contains(&0) {
+            return Err(Error::Guest(if name.len() > XATTR_NAME_MAX {
+                Errno::ENAMETOOLONG
+            } else {
+                Errno::EINVAL
+            }));
+        }
+        Ok(())
+    }
+
+    /// One xattr's value (`Errno::ENODATA` = 61 surfaces via
+    /// [`Error::Guest`] when unset).
+    pub fn getxattr(&self, node: NodeId, name: &[u8]) -> Result<Vec<u8>> {
+        Self::xattr_name(name)?;
+        self.need(CAP_XATTR)?;
+        match self.call(Op::GetXattr {
+            node,
+            name: name.to_vec(),
+        })? {
+            Reply::Value(v) if v.len() <= XATTR_VALUE_MAX => Ok(v),
+            Reply::Value(_) => Err(protocol("xattr value too large")),
+            r => Err(unexpected(&r)),
+        }
+    }
+
+    /// Every xattr name on the node.
+    pub fn listxattr(&self, node: NodeId) -> Result<Vec<Vec<u8>>> {
+        self.need(CAP_XATTR)?;
+        match self.call(Op::ListXattr { node })? {
+            Reply::Names(ns) => {
+                for n in &ns {
+                    Self::xattr_name(n)?;
+                }
+                Ok(ns)
+            }
+            r => Err(unexpected(&r)),
+        }
+    }
+
+    /// Set an xattr — `flags`: 0 set, 1 create-only, 2 replace-only.
+    pub fn setxattr(&self, node: NodeId, name: &[u8], value: &[u8], flags: u32) -> Result<()> {
+        Self::xattr_name(name)?;
+        if value.len() > XATTR_VALUE_MAX || flags > 2 {
+            return Err(Error::Guest(Errno::EINVAL));
+        }
+        self.need(CAP_XATTR)?;
+        self.call(Op::SetXattr {
+            node,
+            name: name.to_vec(),
+            value: value.to_vec(),
+            flags,
+        })
+        .map(drop)
+    }
+
+    pub fn removexattr(&self, node: NodeId, name: &[u8]) -> Result<()> {
+        Self::xattr_name(name)?;
+        self.need(CAP_XATTR)?;
+        self.call(Op::RemoveXattr {
+            node,
+            name: name.to_vec(),
+        })
+        .map(drop)
     }
 
     /// Resolve a guest path from the root, component by component.
