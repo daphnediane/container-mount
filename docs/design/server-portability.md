@@ -94,7 +94,8 @@ and defers ownership semantics.
 - Unix sockets: fine on macOS/BSD — we bind paths, no abstract
   namespace needed. Windows: `AF_UNIX` exists since Win10 RS4; TCP
   and named pipes are the fallbacks.
-- The `--stdio` transport already on the TODO list matters *more*
+- The `--stdio` transport already on the work list
+  ([item](../work/server/future/stdio-transport.md)) matters *more*
   here: exec-pipe relays are the common way to reach a Windows guest.
 
 ### Symlinks

@@ -101,12 +101,12 @@ detection: the release build *knows* it ships a bundle; sniffing a
 root-owned libexec can't tell "admin-installed cargo prefix" from
 "pkg-managed receipt" reliably.
 
-| operation                           | unpackaged          | packaged                                                                                       |
-| ----------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
-| `fetch-servers`, bundled triple     | install to libexec  | report already installed — the bundled copy **is** the fetch result (same release, same bytes) |
-| `fetch-servers`, non-bundled triple | install to libexec  | install to the per-user servers dir                                                            |
-| `server-path --fetch`               | fetch → libexec     | bundled → print bundled path, no download; missing → fetch → per-user dir                      |
-| `update`                            | client-tarball swap | prefer the signed pkg when a pkg receipt exists (the existing TODO item), tarball elsewhere    |
+| operation                           | unpackaged          | packaged                                                                                                                                   |
+| ----------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fetch-servers`, bundled triple     | install to libexec  | report already installed — the bundled copy **is** the fetch result (same release, same bytes)                                             |
+| `fetch-servers`, non-bundled triple | install to libexec  | install to the per-user servers dir                                                                                                        |
+| `server-path --fetch`               | fetch → libexec     | bundled → print bundled path, no download; missing → fetch → per-user dir                                                                  |
+| `update`                            | client-tarball swap | prefer the signed pkg when a pkg receipt exists (the existing [work item](../work/packaging/1.0/update-prefers-pkg.md)), tarball elsewhere |
 
 The fallback when libexec isn't writable applies everywhere, not
 just under `packaged`: fetch → per-user dir, warn that the prefix
@@ -203,7 +203,8 @@ server whose wire semantics are a superset of 3.y's claims to serve
 claim the old range. That needs a handshake evolution — postcard
 structs can't grow fields, so it lands as a new hello variant keyed
 off the magic/version fields, plus a normative compat matrix in the
-protocol-contract doc (already a 1.0 TODO). Ranges, the stamp's
+protocol-contract doc (already a [1.0 work
+item](../work/protocol/1.0/wire-contract.md)). Ranges, the stamp's
 build identity, and strict-equality-today together cover the three
 questions an embedder asks of a server: *can it speak to me, which
 release is it, is it the exact build I pinned.*

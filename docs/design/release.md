@@ -30,7 +30,7 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
    `cargo audit`, `cargo deny`, `THIRD-PARTY-NOTICES.yaml` freshness
    (regenerate with `cargo bundle-licenses -f yaml -o
    THIRD-PARTY-NOTICES.yaml` if stale), and `tests/e2e.sh` when an OCI
-   engine is up. Confirm [TODO] lists only still-open work and the
+   engine is up. Confirm [work] lists only still-open work and the
    docs reflect what shipped.
 2. Update `CHANGELOG.md`: rename the running `## X.Y.Z-dev` section to
    `## X.Y.Z -- YYYY-MM-DD` and audit it against `git log --oneline
@@ -65,7 +65,7 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
 
    Review the draft and publish (`gh release edit vX.Y.Z
    --draft=false`).
-7. crates.io publish is deferred — see [TODO]; until decided, install
+7. crates.io publish is deferred — see [work]; until decided, install
    paths are the pkg, binstall tarball, `cargo install --path`, and
    `distrofs update`/`fetch-servers`.
 8. Close the issues the release resolves, naming `vX.Y.Z` in each
@@ -95,8 +95,8 @@ the draft; re-open the dev cycle.
 `## X.Y.Z -- YYYY-MM-DD` sections grouped Added / Changed / Fixed. The
 top section is the running draft (`## X.Y.Z-dev`) fed as work lands;
 at release time it's renamed and audited, so the changelog stays the
-permanent record and TODO stays a list of work that remains.
+permanent record and `docs/work/` stays a list of work that remains.
 
 [packaging]: packaging.md
 [SemVer]: https://semver.org
-[TODO]: ../TODO.md
+[work]: ../work/

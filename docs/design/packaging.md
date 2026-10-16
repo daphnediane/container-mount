@@ -8,7 +8,7 @@ Release by `.github/workflows/release.yml`, alongside
 `THIRD-PARTY-NOTICES.yaml` and a CycloneDX SBOM when
 `cargo-cyclonedx` is present. `cargo install` from a checkout is the
 baseline path; crates.io publishing is a 1.0-milestone decision
-(TODO.md).
+([work item](../work/packaging/1.0/crates-io-publishing.md)).
 
 ## Assets
 

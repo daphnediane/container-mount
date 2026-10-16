@@ -1,0 +1,69 @@
+# Work items
+
+The working roadmap — open work only, one file per item at
+`<area>/<milestone>/<feature>.md`:
+
+- `<milestone>` mirrors the GitHub milestone on the item's issue
+  (`1.0`). `future/` holds items with no milestone (post-1.0 or
+  undated).
+- Every item links its GitHub issue; the issue and the design docs it
+  cites are the source of truth for details.
+- When an item is completed its file leaves this tree: the
+  user-facing change is recorded in the `X.Y.Z-dev` section of
+  [CHANGELOG.md](../../CHANGELOG.md), which is the permanent record of
+  what shipped.
+
+## Index
+
+### `1.0` milestone
+
+- [packaging/1.0/crates-io-publishing.md](packaging/1.0/crates-io-publishing.md)
+  — decide crates.io publishing ([#1])
+- [packaging/1.0/update-prefers-pkg.md](packaging/1.0/update-prefers-pkg.md)
+  — `update` prefers the signed pkg on pkg installs ([#2])
+- [packaging/1.0/per-triple-servers.md](packaging/1.0/per-triple-servers.md)
+  — per-triple server layout ([#3])
+- [packaging/1.0/packaged-feature.md](packaging/1.0/packaged-feature.md)
+  — `packaged` cargo feature + per-user servers dir ([#4])
+- [cli/1.0/clap-man-pages.md](cli/1.0/clap-man-pages.md) — `clap`
+  cargo feature + man pages ([#5])
+- [protocol/1.0/wire-contract.md](protocol/1.0/wire-contract.md) —
+  normative protocol contract doc ([#6])
+
+### `future` (no milestone)
+
+- fskit/ — [fskit-front-end](fskit/future/fskit-front-end.md) ([#7]),
+  [inotify-invalidation](fskit/future/inotify-invalidation.md) ([#8])
+- server/ — [later-capabilities](server/future/later-capabilities.md)
+  ([#9]), [stdio-transport](server/future/stdio-transport.md) ([#11]),
+  [serve-root](server/future/serve-root.md) ([#12]),
+  [serve-ports](server/future/serve-ports.md) ([#13])
+- mounts/ — [distro-to-distro](mounts/future/distro-to-distro.md)
+  ([#10])
+- protocol/ — [protocol-ranges](protocol/future/protocol-ranges.md)
+  ([#14])
+- packaging/ —
+  [embedder-pinned-pair](packaging/future/embedder-pinned-pair.md)
+  ([#15]), [x86-64-universal](packaging/future/x86-64-universal.md)
+  ([#16])
+- infra/ — [ci-musl](infra/future/ci-musl.md) ([#17]),
+  [fake-releases](infra/future/fake-releases.md) ([#18])
+
+[#1]: https://github.com/daphnediane/distrofs/issues/1
+[#2]: https://github.com/daphnediane/distrofs/issues/2
+[#3]: https://github.com/daphnediane/distrofs/issues/3
+[#4]: https://github.com/daphnediane/distrofs/issues/4
+[#5]: https://github.com/daphnediane/distrofs/issues/5
+[#6]: https://github.com/daphnediane/distrofs/issues/6
+[#7]: https://github.com/daphnediane/distrofs/issues/7
+[#8]: https://github.com/daphnediane/distrofs/issues/8
+[#9]: https://github.com/daphnediane/distrofs/issues/9
+[#10]: https://github.com/daphnediane/distrofs/issues/10
+[#11]: https://github.com/daphnediane/distrofs/issues/11
+[#12]: https://github.com/daphnediane/distrofs/issues/12
+[#13]: https://github.com/daphnediane/distrofs/issues/13
+[#14]: https://github.com/daphnediane/distrofs/issues/14
+[#15]: https://github.com/daphnediane/distrofs/issues/15
+[#16]: https://github.com/daphnediane/distrofs/issues/16
+[#17]: https://github.com/daphnediane/distrofs/issues/17
+[#18]: https://github.com/daphnediane/distrofs/issues/18

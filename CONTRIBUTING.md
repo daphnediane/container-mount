@@ -17,10 +17,13 @@ assume good faith, don't be a jerk.
   (`distrofs --version`), the transport involved (unix socket / fd /
   TCP) and which engine relayed it, plus the command you ran and what
   happened vs. what you expected.
-- **Feature ideas** — for anything bigger than a small fix, open an
-  issue to discuss before writing code.
+- **Feature ideas** — check the [open issues][issue] first; each
+  planned item has an issue linking its doc under docs/work/, so a
+  fair amount of the roadmap is already tracked. For anything bigger
+  than a small fix, open an issue to discuss before writing code.
 - **Pull requests** — small, focused PRs are far easier to review than
-  sweeping ones.
+  sweeping ones. PRs should reference the issue they implement; only
+  trivial fixes (typos, obvious bugs) should come in untracked.
 
 ## Development setup
 
