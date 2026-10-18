@@ -1,4 +1,4 @@
-# distrofs split — what happened
+# History — the distrofs split
 
 `distrofs` was split out of `container-distro` into this standalone
 repo so the guest file server + wire protocol + client library are
@@ -23,8 +23,12 @@ From `main/` (container-distro):
   the guest server, now built for both `aarch64` and `x86_64` musl
 - `src/distrofs/proto.rs` → `src/proto.rs` — wire protocol
 - `src/distrofs/client.rs` → `src/client.rs`, `symlink.rs` →
-  `src/symlink.rs` — the validating host client (later the C ABI the
-  FSKit module links)
+  `src/symlink.rs` — the validating host client library (later the C
+  ABI the FSKit module links)
+- container-distro's `fs` command implementations →
+  `src/bin/distrofs/fscli.rs` (+ `table.rs`) — the host-side file
+  commands (`ls`, `stat`, `get`, `put`, `check`); container-distro's
+  `src/cli/commands/fs.rs` is only the arg mapper
 - `src/distrofs/connect.rs` → `src/connect.rs` — generalized to
   unix/tcp/fd transports; the `container-distro`-specific socket-dir
   naming moved out (`socket-path` manages `<temp>/distrofs/s/` for
@@ -38,7 +42,7 @@ repo scaffolding (rules, workflows, docs, deny.toml).
 
 ## What stayed in container-distro
 
-Apple-`container`-specific deployment only, in `src/distrofs.rs`:
+Apple-`container`-specific deployment only, in `src/distro/distrofs.rs`:
 
 - its own `<temp>/container-distro/s/` socket layout (stable across
   the split — already-published sockets keep resolving)
