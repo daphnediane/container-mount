@@ -1,15 +1,13 @@
 # Contributing
 
-**Draft.** container-mount (the `distrofs` binary and, in design, the
-`container mount` plugin) is a personal project with, so far, a single
-maintainer — this file exists ahead of need. Issues and pull requests
-are still welcome; anything marked `[TODO]` is a placeholder that will
-be filled in if a real community forms.
+container-mount (the `distrofs` binary and, in design, the
+`container mount` plugin) is a personal project with a single
+maintainer. Issues and pull requests are welcome.
 
 ## Code of conduct
 
 Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md)
-(Contributor Covenant 3.0 — also a draft). Short version: be kind,
+(adapted from Contributor Covenant 3.0). Short version: be kind,
 assume good faith, don't be a jerk.
 
 ## Ways to help

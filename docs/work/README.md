@@ -17,6 +17,9 @@ The working roadmap — open work only, one file per item at
 
 ### `1.0` milestone
 
+The non-issue 1.0 gates (naming, GPG, the final security review) are
+in [milestone-1.0.md](../milestone-1.0.md).
+
 - [packaging/1.0/crates-io-publishing.md](packaging/1.0/crates-io-publishing.md)
   — decide crates.io publishing ([#1])
 - [packaging/1.0/update-prefers-pkg.md](packaging/1.0/update-prefers-pkg.md)
