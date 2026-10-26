@@ -42,7 +42,7 @@ SBOM="container-mount-$version$prov_suffix-sbom.cdx"
 # Only the host binary is signed — the musl servers are ELF.
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
     step "codesign container-mount ($CODESIGN_IDENTITY)"
-    "$HERE/sign.sh" "$OUT/bin/container-mount"
+    "$HERE/sign.sh" --identifier "$IDENTIFIER" "$OUT/bin/container-mount"
 fi
 
 step "stage payload"

@@ -19,6 +19,7 @@ nscd
 openpgp
 osxfuse
 pemfile
+pinentry
 reqwest
 rustc
 rustls

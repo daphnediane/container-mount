@@ -182,8 +182,9 @@ What container-mount guarantees the embedder can rely on:
   and locate inside a foreign root, so an embedder can query its
   store through the same discovery logic instead of reimplementing it;
 - signed builds always carry identifier
-  `io.github.daphnediane.container-mount` — the requirement container-distro
-  already pins before handing the client a session token.
+  `io.github.daphnediane.container-mount` (the signing step verifies
+  it) — the requirement `update` enforces, and the one container-distro
+  will pin before handing the client a session token.
 
 container-distro-side follow-ups (tracked there, not here): its
 `server_candidates` gains the pinned appdata roots ahead of the

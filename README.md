@@ -114,7 +114,9 @@ Expected signers:
   detached `.sig` + binary: `Developer ID Application: Daphne
   Pfister (YN9EG6U9PY)`. The certificates chain to the Apple Root CA
   (`codesign -dvvv --detached=` lists them under `Authority=`); the
-  signer name + team ID `YN9EG6U9PY` are the stable check.
+  signer name + team ID `YN9EG6U9PY` are the stable check. The binary
+  (and the plugin's `bin/mount` copy) is signed as
+  `io.github.daphnediane.container-mount` — what `update` requires.
 - `.asc`: GPG `29F8 7CBD 7DF6 A40E 2A44 7111 6F4D 7952 6D9B AEDF`
   (Daphne Pfister <daphnediane@mac.com>). Fetch the public key with
   `curl https://github.com/daphnediane.gpg | gpg --import` or `gpg
