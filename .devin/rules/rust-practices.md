@@ -15,9 +15,18 @@ globs: **/*.rs,**/Cargo.toml
 
 ## Code Style
 
+<!-- cspell:ignore ncols segs pathish CLOEXEC -->
+
 - `snake_case` for functions, variables, modules
 - `CamelCase` for types and traits
 - `SCREAMING_SNAKE_CASE` for constants and statics
+- Prefer real English words over abbreviations in identifiers
+  (`column_count` not `ncols`, `segments` not `segs`) — see
+  `english-style.md`
+- Name "resembles X" parameters `x_like` (`path_like`), not invented
+  suffixes (`pathish`)
+- Match external APIs verbatim (`O_CLOEXEC`, `localtime_r`,
+  `fallocate`) — don't anglicize platform names
 - Explicit types on public APIs, elide when obvious locally
 - Keep functions short and focused
 - Avoid `unwrap()`/`expect()` in non-test code; use `?`
