@@ -154,7 +154,16 @@ fn our_servers(dev: bool) -> Result<Vec<(Platform, PathBuf)>> {
 fn checked_server(path: &Path) -> Result<PathBuf> {
     let path =
         fs::canonicalize(path).with_context(|| format!("cannot resolve {}", path.display()))?;
-    let (version, _) = servers::stamped(&path)?;
+    let stamp = servers::stamped(&path)?;
+    let version = &stamp.version;
+    if !stamp.compatible() {
+        bail!(
+            "{} speaks a different protocol (protocol {:?}, wire {}) — client and servers must match",
+            path.display(),
+            stamp.protocol,
+            stamp.wire.as_deref().unwrap_or("none")
+        );
+    }
     if version != env!("CARGO_PKG_VERSION") {
         bail!(
             "{} is container-mount {version}, not {} — client and servers must match",
@@ -500,8 +509,10 @@ mod tests {
         fs::write(
             &p,
             format!(
-                "\x7fELF container-mount-version:{}:protocol:2\0{name}",
-                env!("CARGO_PKG_VERSION")
+                "\x7fELF container-mount-version:{}:protocol:{}:wire:{}\0{name}",
+                env!("CARGO_PKG_VERSION"),
+                container_mount::proto::VERSION,
+                container_mount::proto::WIRE_HEX
             ),
         )
         .unwrap();
@@ -624,5 +635,16 @@ mod tests {
         let old = src.path().join("old");
         fs::write(&old, b"container-mount-version:0.0.1:protocol:1\0").unwrap();
         assert!(checked_server(&old).is_err());
+        // Same version, other protocol sources (a dev build): refused.
+        let drift = src.path().join("drift");
+        fs::write(
+            &drift,
+            format!(
+                "container-mount-version:{}:protocol:0:wire:ffffffffffffffff\0",
+                env!("CARGO_PKG_VERSION")
+            ),
+        )
+        .unwrap();
+        assert!(checked_server(&drift).is_err());
     }
 }

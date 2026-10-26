@@ -58,8 +58,8 @@ listener exists.
 ## Handshake (mutual)
 
 ```text
-server → ServerHello { magic = "container-mount", version, server_nonce[32] }
-client → ClientAuth  { version, client_nonce[32], mac_c = HMAC-SHA256(token, "container-mount/c" ‖ server_nonce) }
+server → ServerHello { magic = "container-mount", version, wire[8], server_nonce[32] }
+client → ClientAuth  { version, wire[8], client_nonce[32], mac_c = HMAC-SHA256(token, "container-mount/c" ‖ server_nonce) }
 server → ServerAuth  { mac_s = HMAC-SHA256(token, "container-mount/s" ‖ client_nonce), caps, root attributes }
 ```
 
@@ -68,6 +68,19 @@ the socket must not get a root file server. `mac_c` is checked in
 constant time; a failure closes the connection without detail. The
 token is 32 random bytes per server instance, supplied via
 `CONTAINER_MOUNT_TOKEN`. Nonces stop replay across instances.
+
+**Version and wire.** `version` is 0 for every 0.x release and 1 is
+reserved for the 1.0.0 contract. Until then the wire may still change
+between releases, so both sides also send `wire`: the first 8 bytes of
+SHA-256 over `src/proto.rs` (line endings normalized), computed by
+`build.rs` at compile time. Builds from different protocol sources —
+two releases, or a dev build and a release — refuse each other with
+"built from different protocol sources" instead of failing somewhere
+mid-session; the client checks the server's hello, the server drops a
+client whose `ClientAuth` differs. Any edit to `proto.rs`, comments
+included, changes `wire` — deliberately strict while the protocol is
+unstable. At 1.0 `wire` leaves the hello and `version` alone governs
+([install-layout.md](install-layout.md#protocol-version-policy)).
 
 ## Framing and messages
 
@@ -98,7 +111,7 @@ Like FUSE's low-level API:
 - `FileHandle` (`u64`) comes from `Open`/`Create` and is released by
   `Release`.
 
-## Operations (v1)
+## Operations
 
 `Lookup`, `Forget`, `GetAttr`, `SetAttr` (mode, uid/gid, size, times),
 `ReadDir { node, cookie, max_entries }` returning entries *with*
@@ -108,7 +121,7 @@ attributes (stateless — the server reopens the directory and
 (`RENAME_NOREPLACE`/`EXCHANGE`), `Symlink`, `ReadLink`, `Link`,
 `StatFs`. `Mknod` is deliberately absent.
 
-**Optional ops** are gated by `ServerAuth.caps`; a v1 peer drops the
+**Optional ops** are gated by `ServerAuth.caps`; a server without one drops the
 connection on an op it can't decode, so the client checks the bit
 (`Client::need` → `EOPNOTSUPP`) before sending. Enum variants encode
 by position — append, never reorder — and postcard can't extend a
@@ -122,7 +135,7 @@ struct once shipped, so a new field on `Attr`/`SetAttr`/`StatFs`/
 | `CAP_FALLOCATE` | `Fallocate`                                        |
 | `CAP_DIR_SYNC`  | `FsyncDir`, `SyncFs`                               |
 | `CAP_XATTR`     | `GetXattr`, `ListXattr`, `SetXattr`, `RemoveXattr` |
-| `CAP_USERS`     | `LookupUser` (protocol 3)                          |
+| `CAP_USERS`     | `LookupUser`                                       |
 | `CAP_EVENTS`    | `Event` pushes (planned)                           |
 
 **Users.** `LookupUser { user }` resolves `NAME|UID[:GID]` (at most
@@ -266,7 +279,7 @@ and Finder get identical enforcement.
 ## Version stamp
 
 Every `container-mount` build embeds a scannable stamp —
-`container-mount-version:<version>:protocol:<n>` — so server discovery can
+`container-mount-version:<version>:protocol:<n>:wire:<hex>` — so server discovery can
 reject a stale or misplaced binary before launching it rather than
 surfacing a failed exec or a hung handshake. The stamp may carry
 trailing `key:value` pairs (build identity — `commit`, `dirty`);

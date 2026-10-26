@@ -168,11 +168,19 @@ impl Client {
                 hello.version
             )));
         }
+        if hello.wire != WIRE {
+            return Err(protocol(format!(
+                "server was built from different protocol sources (wire {}, this build {WIRE_HEX}) \
+                 — use the server from this release",
+                hex(&hello.wire)
+            )));
+        }
         let nonce = random32()?;
         write_frame(
             &mut stream,
             &ClientAuth {
                 version: VERSION,
+                wire: WIRE,
                 nonce,
                 mac: client_mac(token, &hello.nonce),
             },
@@ -230,7 +238,7 @@ impl Client {
     }
 
     /// `EOPNOTSUPP` without a round trip when the server lacks `bit` —
-    /// a v1 peer would drop the connection on an op it can't decode.
+    /// a peer without the op would drop the connection on decoding it.
     fn need(&self, bit: u64) -> Result<()> {
         if self.caps & bit != 0 {
             Ok(())
@@ -805,6 +813,10 @@ mod tests {
     /// Run a fake server on one end of a socketpair. `mutate` lets a
     /// test misbehave in the handshake.
     fn fake_server(token: [u8; 32], magic: [u8; 15], prove: bool) -> Stream {
+        fake_server_wire(token, magic, WIRE, prove)
+    }
+
+    fn fake_server_wire(token: [u8; 32], magic: [u8; 15], wire: [u8; 8], prove: bool) -> Stream {
         let (client, mut server) = UnixStream::pair().unwrap();
         thread::spawn(move || {
             let nonce = random32().unwrap();
@@ -813,6 +825,7 @@ mod tests {
                 &ServerHello {
                     magic,
                     version: VERSION,
+                    wire,
                     nonce,
                 },
             )
@@ -915,6 +928,10 @@ mod tests {
             .err()
             .unwrap();
         assert!(e.to_string().contains("failed to prove"), "{e}");
+        let e = Client::handshake(fake_server_wire(TOKEN, MAGIC, [9; 8], true), &TOKEN)
+            .err()
+            .unwrap();
+        assert!(e.to_string().contains("different protocol sources"), "{e}");
     }
 
     #[test]

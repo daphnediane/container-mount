@@ -26,8 +26,34 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// Protocol major version; peers reject any other.
-pub const VERSION: u16 = 3;
+/// Protocol major version; peers reject any other. 0 for every 0.x
+/// release — the wire can still change, and [`WIRE`] tells builds apart;
+/// 1 is reserved for the 1.0.0 contract.
+pub const VERSION: u16 = 0;
+/// The wire fingerprint as hex: SHA-256 of this file's source, first 8
+/// bytes (`build.rs`). Pre-1.0, client and server must match exactly.
+pub const WIRE_HEX: &str = env!("CONTAINER_MOUNT_WIRE");
+/// [`WIRE_HEX`] as bytes, sent in [`ServerHello`] and [`ClientAuth`].
+pub const WIRE: [u8; 8] = wire_bytes(WIRE_HEX);
+
+const fn wire_bytes(hex: &str) -> [u8; 8] {
+    const fn nibble(c: u8) -> u8 {
+        match c {
+            b'0'..=b'9' => c - b'0',
+            b'a'..=b'f' => c - b'a' + 10,
+            _ => panic!("CONTAINER_MOUNT_WIRE must be lowercase hex"),
+        }
+    }
+    let h = hex.as_bytes();
+    assert!(h.len() == 16, "CONTAINER_MOUNT_WIRE must be 16 hex digits");
+    let mut out = [0u8; 8];
+    let mut i = 0;
+    while i < 8 {
+        out[i] = nibble(h[2 * i]) << 4 | nibble(h[2 * i + 1]);
+        i += 1;
+    }
+    out
+}
 /// First bytes of [`ServerHello`] — rejects non-container-mount listeners early.
 pub const MAGIC: [u8; 15] = *b"container-mount";
 /// Upper bound on one frame's payload, checked before allocating.
@@ -530,12 +556,16 @@ pub enum ServerMsg {
 pub struct ServerHello {
     pub magic: [u8; 15],
     pub version: u16,
+    /// [`WIRE`]: the protocol source this server was built from.
+    pub wire: [u8; 8],
     pub nonce: Nonce,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientAuth {
     pub version: u16,
+    /// [`WIRE`]: the protocol source this client was built from.
+    pub wire: [u8; 8],
     pub nonce: Nonce,
     /// [`client_mac`] over the server's nonce.
     pub mac: Mac,

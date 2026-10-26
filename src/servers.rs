@@ -95,6 +95,30 @@ pub struct ServerBuild {
     pub version: Option<String>,
     /// The wire protocol version from its stamp, when readable.
     pub protocol: Option<u16>,
+    /// The pre-1.0 wire fingerprint from its stamp, when present.
+    pub wire: Option<String>,
+}
+
+/// What a binary's version stamp says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stamp {
+    pub version: String,
+    pub protocol: Option<u16>,
+    /// `wire:<hex>` — the protocol source fingerprint (`proto::WIRE_HEX`).
+    pub wire: Option<String>,
+}
+
+impl Stamp {
+    /// Whether this build can talk to the running one: same protocol
+    /// and, when both carry one, the same wire fingerprint.
+    #[must_use]
+    pub fn compatible(&self) -> bool {
+        self.protocol == Some(crate::proto::VERSION)
+            && self
+                .wire
+                .as_deref()
+                .is_none_or(|w| w == crate::proto::WIRE_HEX)
+    }
 }
 
 /// The running binary, canonicalized.
@@ -160,14 +184,13 @@ fn candidates(platform: Platform, dev: bool) -> Vec<PathBuf> {
 }
 
 /// Read the version stamp out of a binary's bytes.
-/// `Some((version, protocol))`; either half may be absent.
 ///
 /// Every occurrence of [`STAMP_MARK`] is tried: the mark's own string
 /// constant is in the binary too, and a release link can place it —
 /// followed by whatever strings the linker merged after it — ahead of
 /// the real stamp.
 #[must_use]
-pub fn scan_stamp(bytes: &[u8]) -> Option<(String, Option<u16>)> {
+pub fn scan_stamp(bytes: &[u8]) -> Option<Stamp> {
     bytes
         .windows(STAMP_MARK.len())
         .enumerate()
@@ -175,8 +198,9 @@ pub fn scan_stamp(bytes: &[u8]) -> Option<(String, Option<u16>)> {
         .find_map(|(pos, _)| parse_stamp(&bytes[pos + STAMP_MARK.len()..]))
 }
 
-/// `<version>:protocol:<n>[:key:value…]` at the start of `rest`.
-fn parse_stamp(rest: &[u8]) -> Option<(String, Option<u16>)> {
+/// `<version>:protocol:<n>[:key[:value]…]` at the start of `rest`;
+/// unknown keys (`commit`, `dirty`, …) are skipped.
+fn parse_stamp(rest: &[u8]) -> Option<Stamp> {
     let end = rest
         .iter()
         .position(|&b| !(0x21..=0x7e).contains(&b))
@@ -186,13 +210,19 @@ fn parse_stamp(rest: &[u8]) -> Option<(String, Option<u16>)> {
     if !version.starts_with(|c: char| c.is_ascii_digit()) {
         return None;
     }
-    let protocol = tail
-        .strip_prefix("protocol:")?
-        .split(':')
-        .next()?
-        .parse()
-        .ok();
-    Some((version.to_string(), protocol))
+    let mut fields = tail.strip_prefix("protocol:")?.split(':');
+    let protocol = fields.next()?.parse().ok();
+    let mut wire = None;
+    while let Some(key) = fields.next() {
+        if key == "wire" {
+            wire = fields.next().map(str::to_owned);
+        }
+    }
+    Some(Stamp {
+        version: version.to_string(),
+        protocol,
+        wire,
+    })
 }
 
 /// One [`ServerBuild`] per platform whose binary exists.
@@ -205,20 +235,18 @@ pub fn servers(dev: bool) -> Vec<ServerBuild> {
             let path = candidates(platform, dev)
                 .into_iter()
                 .find(|p| p.is_file())?;
-            let (version, protocol) = std::fs::File::open(&path)
-                .ok()
-                .and_then(|f| {
-                    use std::io::Read;
-                    let mut buf = Vec::new();
-                    f.take(SCAN_MAX).read_to_end(&mut buf).ok()?;
-                    scan_stamp(&buf)
-                })
-                .map_or((None, None), |(v, p)| (Some(v), p));
+            let stamp = std::fs::File::open(&path).ok().and_then(|f| {
+                use std::io::Read;
+                let mut buf = Vec::new();
+                f.take(SCAN_MAX).read_to_end(&mut buf).ok()?;
+                scan_stamp(&buf)
+            });
             Some(ServerBuild {
                 platform,
                 path,
-                version,
-                protocol,
+                version: stamp.as_ref().map(|s| s.version.clone()),
+                protocol: stamp.as_ref().and_then(|s| s.protocol),
+                wire: stamp.and_then(|s| s.wire),
             })
         })
         .collect()
@@ -257,7 +285,7 @@ pub fn search_paths(dev: bool) -> Vec<PathBuf> {
 
 /// Validate `path` names a container-mount build: it must carry the stamp or
 /// be explicitly trusted by the caller.
-pub fn stamped(path: &Path) -> Result<(String, Option<u16>)> {
+pub fn stamped(path: &Path) -> Result<Stamp> {
     let bytes = std::fs::read(path).with_context(|| format!("cannot read {}", path.display()))?;
     scan_stamp(&bytes).with_context(|| {
         format!(
@@ -314,10 +342,21 @@ mod tests {
         );
     }
 
+    fn stamp(version: &str, protocol: u16, wire: Option<&str>) -> Option<Stamp> {
+        Some(Stamp {
+            version: version.into(),
+            protocol: Some(protocol),
+            wire: wire.map(str::to_owned),
+        })
+    }
+
     #[test]
     fn test_scan_stamp() {
-        let blob = b"\x7fELF stuff container-mount-version:0.1.0-dev:protocol:1\0more";
-        assert_eq!(scan_stamp(blob), Some(("0.1.0-dev".to_string(), Some(1))));
+        let blob = b"\x7fELF stuff container-mount-version:0.1.0-dev:protocol:0:wire:0011223344556677\0more";
+        assert_eq!(
+            scan_stamp(blob),
+            stamp("0.1.0-dev", 0, Some("0011223344556677"))
+        );
         assert_eq!(scan_stamp(b"nothing here"), None);
         // A corrupt suffix still yields the version half.
         let bad = b"container-mount-version:1.2.3:junk";
@@ -325,13 +364,29 @@ mod tests {
         // Later releases append `key:value` pairs (commit, dirty —
         // docs/design/install-layout.md); this release must still read
         // version + protocol out of them.
-        let newer = b"container-mount-version:0.2.0:protocol:3:commit:abc123:dirty\0";
-        assert_eq!(scan_stamp(newer), Some(("0.2.0".to_string(), Some(3))));
+        let newer = b"container-mount-version:0.2.0:protocol:3:commit:abc123:dirty:wire:aa\0";
+        assert_eq!(scan_stamp(newer), stamp("0.2.0", 3, Some("aa")));
+        let older = b"container-mount-version:0.1.0:protocol:0\0";
+        assert_eq!(scan_stamp(older), stamp("0.1.0", 0, None));
         // The mark's own constant, merged with neighboring strings,
         // can come first (seen in release macOS builds).
         // cspell:ignore mountlibexec
         let shadowed =
-            b"container-mount-version:container-mountlibexec\0..container-mount-version:0.1.0:protocol:3\0";
-        assert_eq!(scan_stamp(shadowed), Some(("0.1.0".to_string(), Some(3))));
+            b"container-mount-version:container-mountlibexec\0..container-mount-version:0.1.0:protocol:0\0";
+        assert_eq!(scan_stamp(shadowed), stamp("0.1.0", 0, None));
+    }
+
+    #[test]
+    fn test_stamp_compatibility() {
+        use crate::proto::{VERSION, WIRE_HEX};
+        let this = |wire: Option<&str>| stamp("x", VERSION, wire).unwrap();
+        assert!(this(Some(WIRE_HEX)).compatible());
+        assert!(this(None).compatible());
+        assert!(!this(Some("ffffffffffffffff")).compatible());
+        assert!(
+            !stamp("x", VERSION + 1, Some(WIRE_HEX))
+                .unwrap()
+                .compatible()
+        );
     }
 }

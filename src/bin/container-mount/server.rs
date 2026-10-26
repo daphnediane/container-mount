@@ -1418,11 +1418,13 @@ fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<bool>
         &ServerHello {
             magic: MAGIC,
             version: VERSION,
+            wire: WIRE,
             nonce,
         },
     )?;
     let auth: ClientAuth = read_frame(&mut s)?;
-    if auth.version != VERSION || !ct_eq(&auth.mac, &client_mac(token, &nonce)) {
+    if auth.version != VERSION || auth.wire != WIRE || !ct_eq(&auth.mac, &client_mac(token, &nonce))
+    {
         // No detail for a peer that couldn't prove the token.
         return Ok(false);
     }

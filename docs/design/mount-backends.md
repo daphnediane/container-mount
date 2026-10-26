@@ -414,8 +414,9 @@ and adds a socket relay as a second transport. Sketch:
 ### Compatibility
 
 `container mount --version --format json` reports `{ "interface": N,
-"version": "<container-mount version>", "protocol": P }`; interface 2
-is the verb surface above (1 was the first slice's `fs`/`version`). container-distro declares the
+"version": "<container-mount version>", "protocol": P, "wire": "<hex>" }`;
+interface 0 is the verb surface above, for every 0.x release (match it
+exactly), and 1 is reserved for the 1.0.0 contract. container-distro declares the
 interface range it understands and treats anything else as "plugin
 absent", with a message naming both versions. A missing plugin shows
 up as `container`'s unknown-command error, which container-distro maps

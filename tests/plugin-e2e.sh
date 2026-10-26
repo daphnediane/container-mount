@@ -171,7 +171,7 @@ else
 fi
 
 out="$(plugin --version --format json)"
-echo "$out" | grep -q '"interface":2' && pass "version json" || flunk "version json ($out)"
+echo "$out" | grep -q '"interface":0' && pass "version json" || flunk "version json ($out)"
 
 [ "$fail" = 0 ] && log "all checks passed" || die "failures above"
 

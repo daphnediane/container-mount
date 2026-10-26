@@ -46,6 +46,10 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 sha2 = "0.11"
 
+# build.rs: the wire fingerprint (runs on the build host only).
+[build-dependencies]
+sha2 = "0.11"
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -153,7 +153,7 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
 
     // The stamp proves it's a container-mount build; on macOS codesign proves
     // provenance, and the team must match the installed copy's.
-    let (ver, _) = servers::stamped(&new_bin)?;
+    let ver = servers::stamped(&new_bin)?.version;
     check_new_binary(&new_bin, &exe, force)?;
     let mut servers_ok = Vec::new();
     for platform in servers::Platform::ALL {
@@ -242,16 +242,17 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
         if !s.is_file() {
             continue;
         }
-        let (v, p) = servers::stamped(&s)
+        let st = servers::stamped(&s)
             .with_context(|| format!("{} failed its version-stamp check", s.display()))?;
         let to = servers::installed_path(&dest, platform);
         install_dir_for(&to)?;
         install_file(&s, &to)?;
         installed += 1;
         println!(
-            "installed {} ({v}, protocol {})",
+            "installed {} ({}, protocol {})",
             to.display(),
-            p.unwrap_or(0)
+            st.version,
+            st.protocol.unwrap_or(0)
         );
     }
     let _ = std::fs::remove_dir_all(&work);

@@ -37,9 +37,9 @@ use crate::fscli;
 use cli::{Base, Ref, Remote, Word};
 
 /// The plugin CLI contract's version — what container-distro checks,
-/// separate from the wire protocol version. 2: verbs with
-/// `TARGET:PATH` replaced `fs`, `--version` replaced `version`.
-pub const INTERFACE: u32 = 2;
+/// separate from the wire protocol version. 0 through the 0.x releases
+/// (match exactly); 1 is reserved for the 1.0.0 contract.
+pub const INTERFACE: u32 = 0;
 
 /// Guest vsock ports the server picks from: below 1024 so only
 /// `CAP_NET_BIND_SERVICE` can bind them, clear of `vminitd`'s 1024.
@@ -156,9 +156,10 @@ fn attach(_args: &[String]) -> Result<()> {
 fn version(args: &[String]) -> Result<()> {
     match args {
         [] => println!(
-            "container mount {} (interface {INTERFACE}, protocol {})",
+            "container mount {} (interface {INTERFACE}, protocol {}, wire {})",
             env!("CARGO_PKG_VERSION"),
-            proto::VERSION
+            proto::VERSION,
+            proto::WIRE_HEX
         ),
         [f, j] if f == "--format" && j == "json" => println!(
             "{}",
@@ -166,6 +167,7 @@ fn version(args: &[String]) -> Result<()> {
                 "interface": INTERFACE,
                 "version": env!("CARGO_PKG_VERSION"),
                 "protocol": proto::VERSION,
+                "wire": proto::WIRE_HEX,
             })
         ),
         _ => bail!("usage: container mount --version [--format json]"),

@@ -43,11 +43,13 @@ use container_mount::proto;
 static VERSION_STAMP: &[u8] = concat!(
     "container-mount-version:",
     env!("CARGO_PKG_VERSION"),
-    ":protocol:3\0"
+    ":protocol:0:wire:",
+    env!("CONTAINER_MOUNT_WIRE"),
+    "\0"
 )
 .as_bytes();
 const _: () = assert!(
-    proto::VERSION == 3,
+    proto::VERSION == 0,
     "bump the stamp's protocol digits with proto::VERSION"
 );
 
@@ -151,13 +153,14 @@ fn parse_global(args: &[String]) -> Result<(Opts, &[String])> {
     Ok((o, &args[i..]))
 }
 
-/// `container-mount X.Y.Z (protocol N)` — the same text `--version` prints and
-/// the stamp carries.
+/// `container-mount X.Y.Z (protocol N, wire HEX)` — what `--version`
+/// prints, matching the stamp's fields.
 fn version() -> String {
     format!(
-        "container-mount {} (protocol {})",
+        "container-mount {} (protocol {}, wire {})",
         env!("CARGO_PKG_VERSION"),
-        proto::VERSION
+        proto::VERSION,
+        proto::WIRE_HEX
     )
 }
 
@@ -263,7 +266,14 @@ fn servers(args: &[String], dev: bool) -> Result<()> {
                 "{:<11} {}  {}",
                 platform.label(),
                 match (s.version.as_deref(), s.protocol) {
-                    (Some(v), Some(p)) => format!("{v} (protocol {p})"),
+                    (Some(v), Some(p)) => format!(
+                        "{v} (protocol {p}{})",
+                        match s.wire.as_deref() {
+                            Some(w) if w != proto::WIRE_HEX =>
+                                format!(", wire {w} — not this build's {}", proto::WIRE_HEX),
+                            _ => String::new(),
+                        }
+                    ),
                     (Some(v), None) => v.to_string(),
                     _ => "(version unknown)".into(),
                 },

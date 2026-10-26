@@ -192,11 +192,16 @@ plain-`container-mount` names this layout retires.
 
 ## Stamp and build identity
 
-The stamp grows optional trailing `key:value` pairs:
+The stamp carries optional trailing fields after the protocol —
+`wire` today, build identity later:
 
 ```text
-container-mount-version:<ver>:protocol:<n>:commit:<sha>[:dirty]
+container-mount-version:<ver>:protocol:<n>:wire:<hex>[:commit:<sha>[:dirty]]
 ```
+
+`wire` is the pre-1.0 protocol fingerprint (protocol.md "Version and
+wire"); `servers` flags a server whose `wire` isn't this build's, and
+`install-plugin` refuses to bundle one.
 
 `scan_stamp` iterates pairs after the version and ignores unknown
 keys — old scanners still read version+protocol, and further fields
@@ -209,10 +214,13 @@ merely protocol-compatible, before injecting the server.
 
 ## Protocol version policy
 
-Pre-1.0 the handshake stays strict — `ClientAuth.version ==
-proto::VERSION` or the server drops the connection. Nothing
-negotiates because nothing needs to: the lock-step fetch policy and
-pinned-pair embedder layout keep pairs matched by construction.
+Pre-1.0 the handshake stays strict: `version` is 0 throughout 0.x and
+both sides must also send the same `wire` fingerprint (a hash of the
+protocol source), or the connection is refused with a clear message.
+Nothing negotiates because nothing needs to: the lock-step fetch
+policy, the plugin delivering its own server, and the pinned-pair
+embedder layout keep pairs matched by construction. 1.0.0 drops
+`wire` from the hello and starts `version` at 1.
 
 Post-1.0 the design target is **server-advertised ranges**: a 4.z
 server whose wire semantics are a superset of 3.y's claims to serve
