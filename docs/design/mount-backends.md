@@ -477,6 +477,27 @@ and adds a socket relay as a second transport. Sketch:
   before `create`, so the plugin can derive the socket path and later
   find it again from the id alone.
 
+### Session token hand-off (decided)
+
+The plugin passes each server its token as `container exec -d -e
+CONTAINER_MOUNT_TOKEN_<nonce> … serve --token-env
+CONTAINER_MOUNT_TOKEN_<nonce>`: the value only in the `container`
+child's environment, the per-command name because `container exec -e`
+can't override a variable the target already defines
+([container-internals.md](container-internals.md), [#19]).
+
+Kept for 0.x because the lock-in is small: the plugin always delivers
+its own server, so the launch flags only pair binaries from one
+release, and the mechanism can change in any release. What ships as a
+public contract is `serve --token-env NAME` (useful to embedders facing
+the same `exec` behavior) and the `CONTAINER_MOUNT_TOKEN` default.
+Considered and set aside: a fixed name behind a version gate (still
+needs this fallback), a token file shipped beside the binary (no
+`exec` dependency, but a secret briefly on the guest's disk), and
+stdin (no secret in any environ, but exec's stdin relay is the
+flakiest upstream path). Revisit if upstream fixes `exec -e` or the
+token file's trade-off starts to look better.
+
 ### Compatibility
 
 `container mount --version --format json` reports `{ "interface": N,
@@ -593,8 +614,7 @@ The first plugin slice is in `src/bin/container-mount/plugin/` and
 `src/dial.rs`; the upstream internals it relies on, and its version
 gate, are in [container-internals.md](container-internals.md).
 
-Open plugin work is tracked as issues — the token hand-off ([#19]),
-`attach`/`detach` ([#20]), stopped targets and their lifecycle
+Open plugin work is tracked as issues — `attach`/`detach` ([#20]), stopped targets and their lifecycle
 ([#21]), `prepare` ([#22]), the `open` session ([#23]), the remaining
 verbs ([#24]), opt-in permission checks ([#25]), and a `--dev`
 apiserver requirement ([#26]) — each with a `docs/work/` item.

@@ -29,10 +29,6 @@ in [milestone-1.0.md](../milestone-1.0.md).
 - [protocol/1.0/wire-contract.md](protocol/1.0/wire-contract.md) —
   normative protocol contract doc ([#6])
 
-### Before 0.1.0 (no milestone)
-
-- plugin/ — [token-handoff](plugin/future/token-handoff.md) ([#19])
-
 ### `future` (no milestone)
 
 - plugin/ — [prepare](plugin/future/prepare.md) ([#22]),
@@ -75,7 +71,6 @@ in [milestone-1.0.md](../milestone-1.0.md).
 [#16]: https://github.com/daphnediane/container-mount/issues/16
 [#17]: https://github.com/daphnediane/container-mount/issues/17
 [#18]: https://github.com/daphnediane/container-mount/issues/18
-[#19]: https://github.com/daphnediane/container-mount/issues/19
 [#20]: https://github.com/daphnediane/container-mount/issues/20
 [#21]: https://github.com/daphnediane/container-mount/issues/21
 [#22]: https://github.com/daphnediane/container-mount/issues/22

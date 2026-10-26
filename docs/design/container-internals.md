@@ -77,7 +77,8 @@ this check; there is deliberately no switch to relax it yet.
   de-duplication; `getenv` returns the first match, so a variable the
   container already defines wins over `-e` (shells, which keep the
   last, hide this). The plugin therefore passes the token under a
-  fresh `CONTAINER_MOUNT_TOKEN_<nonce>` name (`serve --token-env`).
+  fresh `CONTAINER_MOUNT_TOKEN_<nonce>` name (`serve --token-env`) —
+  kept for 0.x, see mount-backends.md "Session token hand-off".
   The same symptom on `run` was [apple/container#1212], fixed by #1218
   inside `Parser.allEnv`; `ContainerExec` appends its entries to the
   init process's environment outside that de-duplication.
