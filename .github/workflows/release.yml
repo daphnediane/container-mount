@@ -6,13 +6,13 @@ name: release
 # CHANGELOG section — the maintainer reviews and publishes the draft.
 #
 # Assets produced (the names `fetch-servers`/`update` look for):
-#   distrofs-<ver>-unsigned.pkg            — macOS installer; a signed
+#   container-mount-<ver>-unsigned.pkg            — macOS installer; a signed
 #                                          copy replaces it minus
 #                                          `-unsigned`
-#   distrofs-servers-<ver>.tar.gz          — distrofs-server-aarch64 +
-#                                          distrofs-server-x86_64
-#   distrofs-aarch64-apple-darwin-v<ver>-unsigned.tar.gz
-#                                        — distrofs + both server
+#   container-mount-servers-<ver>.tar.gz          — container-mount-server-aarch64 +
+#                                          container-mount-server-x86_64
+#   container-mount-aarch64-apple-darwin-v<ver>-unsigned.tar.gz
+#                                        — container-mount + both server
 #                                          binaries; signed copies are
 #                                          uploaded over this name
 #                                          minus `-unsigned`
@@ -79,9 +79,9 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease;; esac
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
             --notes-file notes.md \
-            --title "distrofs ${GITHUB_REF_NAME#v}" \
+            --title "container-mount ${GITHUB_REF_NAME#v}" \
             $prerelease \
-            scratch/pkg/distrofs-*.pkg \
-            scratch/pkg/distrofs-*.tar.gz \
+            scratch/pkg/container-mount-*.pkg \
+            scratch/pkg/container-mount-*.tar.gz \
             scratch/pkg/*-sbom.cdx.json \
             THIRD-PARTY-NOTICES.yaml

@@ -1,13 +1,13 @@
-# distrofs — threat model
+# container-mount — threat model
 
-What distrofs protects, what it deliberately doesn't, and the
+What container-mount protects, what it deliberately doesn't, and the
 trust-boundary rules for anyone changing code on either side.
 
 ## The shape
 
-A `distrofs serve` process runs as **root inside the guest** and
+A `container-mount serve` process runs as **root inside the guest** and
 serves the guest's whole root filesystem over a socket. A host
-`distrofs` client connects, proves a shared 32-byte token (and makes
+`container-mount` client connects, proves a shared 32-byte token (and makes
 the server prove it back), then issues filesystem operations. The
 embedder (e.g. container-distro) supplies the socket, launches the
 server, generates the token, and passes the client its arguments.
@@ -17,7 +17,7 @@ server, generates the token, and passes the client its arguments.
 - **The server is a root daemon for its guest.** Serving `/etc/shadow`
   to the host user is the point — the same reach as `exec`/`cp` as
   root, which whoever can launch the server already has.
-- **The client trusts its launcher.** `DISTROFS_TOKEN`, `--socket`,
+- **The client trusts its launcher.** `CONTAINER_MOUNT_TOKEN`, `--socket`,
   and `--peer-requirement` come from whoever spawned it — a hostile
   launcher gains nothing it didn't already have (it launched us).
 - **The guest server trusts its launcher.** Whoever can `exec` inside
@@ -58,7 +58,7 @@ it:
 
 - The socket sits in a `0700` root-owned directory so guest users
   can't reach it.
-- `DISTROFS_TOKEN` is read from the environment and cleared before
+- `CONTAINER_MOUNT_TOKEN` is read from the environment and cleared before
   serving; it never appears on a command line.
 - All filesystem access is `*at()`-relative to `O_PATH|O_NOFOLLOW`
   fds — no host path is ever opened by name.
@@ -84,7 +84,7 @@ it:
   digest of each asset before installing; a mismatched or undigested
   download is refused (or loudly warned, never silent).
 - `update` on macOS additionally checks `identifier
-  "io.github.daphnediane.distrofs" and anchor apple generic` on the
+  "io.github.daphnediane.container-mount" and anchor apple generic` on the
   download, and refuses a team-ID mismatch with the installed copy
   without explicit consent.
 - `update` never self-elevates, refuses to run as root, and refuses
@@ -98,7 +98,7 @@ it:
   location is acceptable there because only the user's own sessions
   consume it. An explicit server-path override, if added, is a
   `--dev` seam only.
-- `DISTROFS_RELEASES_URL` is a **dev-only** seam honored only behind
+- `CONTAINER_MOUNT_RELEASES_URL` is a **dev-only** seam honored only behind
   `--dev` on that invocation — an env var alone can never redirect
   release downloads.
 

@@ -25,8 +25,8 @@ Checklist for a minor release from `main`.
    ```
 
 5. The tag push runs `.github/workflows/release.yml`, which drafts a
-   GitHub Release carrying `distrofs-servers-<ver>.tar.gz` and
-   `distrofs-aarch64-apple-darwin-v<ver>-unsigned.tar.gz` — the asset
+   GitHub Release carrying `container-mount-servers-<ver>.tar.gz` and
+   `container-mount-aarch64-apple-darwin-v<ver>-unsigned.tar.gz` — the asset
    names `fetch-servers`/`update` look for. Review and publish the
    draft; when Developer ID signing is configured, sign the binaries
    locally and re-upload under the same names minus `-unsigned`.
@@ -35,5 +35,5 @@ Checklist for a minor release from `main`.
 7. Open the next cycle: `cargo release version X.Y.0-dev -x
    --no-confirm`, start a fresh empty `## X.Y.0-dev` section atop
    `CHANGELOG.md`, commit, push.
-8. Sanity-check: `git checkout vX.Y.Z && cargo test`, `distrofs
+8. Sanity-check: `git checkout vX.Y.Z && cargo test`, `container-mount
    --version` prints `X.Y.Z`, back to `main`.

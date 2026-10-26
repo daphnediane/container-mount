@@ -4,17 +4,17 @@
  * See LICENSE file for full license text
  */
 
-//! `distrofs serve` — the guest half's command line and listener setup.
+//! `container-mount serve` — the guest half's command line and listener setup.
 //!
-//! The session token always comes from `DISTROFS_TOKEN` (the contract
+//! The session token always comes from `CONTAINER_MOUNT_TOKEN` (the contract
 //! with whatever launched us); where to listen is a flag or
-//! `DISTROFS_SOCKET`, never a baked-in deployment path.
+//! `CONTAINER_MOUNT_SOCKET`, never a baked-in deployment path.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use distrofs::proto;
+use container_mount::proto;
 
 /// Where the server listens.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,7 +36,7 @@ pub struct ServeArgs {
     pub idle: Duration,
 }
 
-const USAGE: &str = "usage: distrofs serve [--uid UID] [--gid GID] \
+const USAGE: &str = "usage: container-mount serve [--uid UID] [--gid GID] \
      [--socket PATH | --listen unix:PATH | --listen tcp:ADDR] [--idle-secs N]";
 
 pub fn parse(args: &[String]) -> Result<ServeArgs> {
@@ -100,7 +100,7 @@ pub fn run(args: &[String]) -> Result<()> {
 #[cfg(not(target_os = "linux"))]
 pub fn run(_args: &[String]) -> Result<()> {
     let _ = parse(_args)?;
-    bail!("distrofs serve only runs inside a Linux guest")
+    bail!("container-mount serve only runs inside a Linux guest")
 }
 
 #[cfg(test)]

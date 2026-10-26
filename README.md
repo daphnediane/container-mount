@@ -6,31 +6,29 @@ environment can use it.
 
 The project has two layers:
 
-- **distrofs** — the wire protocol, the guest file server, and the
-  validating host client, all in one `distrofs` binary (below). The
-  crate, binary, protocol, and release artifacts still carry that
-  name; whether they follow the rename is open until the first
-  release.
+- **The file bridge** — the wire protocol, the guest file server, and
+  the validating host client, all in one `container-mount` binary
+  (below). It was called `distrofs` before the first release.
 - **`container mount`** (in design) — a `podman mount`-style plugin
   for Apple's `container` that reaches *any* container, stopped disk,
   or image, and that container-distro calls for its distro mounts
   through the plugin's CLI alone. See
   [docs/design/mount-backends.md](docs/design/mount-backends.md).
 
-One `distrofs` binary, both ends:
+One `container-mount` binary, both ends:
 
-- **Guest server** (`distrofs serve`) — a static `*-linux-musl` build
+- **Guest server** (`container-mount serve`) — a static `*-linux-musl` build
   that runs inside the container/VM as root, serves the rootfs over a
   Unix socket (or `--listen tcp:`), and exits when idle. Symlink
   targets are confined to the guest root; virtiofs/pseudo filesystems
   present as empty read-only directories.
-- **Host client** (`distrofs ls|stat|get|put|check`) — connects over a
+- **Host client** (`container-mount ls|stat|get|put|check`) — connects over a
   Unix socket (`--socket`, or a managed path from `socket-path`), an
   inherited fd (`--fd`), or TCP (`--tcp`). It owns the whole connect
   path: socket-directory and leaf hygiene, an optional macOS
   code-signing check on the socket peer (`--peer-requirement`), and a
   mutual HMAC-SHA256 handshake over a per-session token
-  (`DISTROFS_TOKEN`).
+  (`CONTAINER_MOUNT_TOKEN`).
 
 The embedder — container-distro, or your own tooling — supplies the
 socket, the token, and the mapped command arguments. It never needs to
@@ -46,22 +44,22 @@ know the wire protocol.
 - `src/servers.rs` — locate/report installed and in-tree server
   binaries by arch + version stamp
 - `src/release.rs` — release lookup, SHA-256-verified downloads
-- `src/bin/distrofs/` — the binary: `serve`, the fs commands, and
+- `src/bin/container-mount/` — the binary: `serve`, the fs commands, and
   `servers`/`server-path`/`fetch-servers`/`update`
 
 ## Server binaries
 
-Releases ship `distrofs-servers-<ver>.tar.gz` with static musl builds
+Releases ship `container-mount-servers-<ver>.tar.gz` with static musl builds
 for `aarch64` and `x86_64`. Install them next to an installed
-`distrofs` (or any prefix) with:
+`container-mount` (or any prefix) with:
 
 ```bash
-distrofs fetch-servers            # <prefix>/libexec/distrofs/
-distrofs fetch-servers --prefix /usr/local
+container-mount fetch-servers            # <prefix>/libexec/container-mount/
+container-mount fetch-servers --prefix /usr/local
 ```
 
-`distrofs servers` reports what it can find (arch, version, protocol)
-without executing anything. `distrofs update` self-updates an
+`container-mount servers` reports what it can find (arch, version, protocol)
+without executing anything. `container-mount update` self-updates an
 installed binary — it verifies the SHA-256 the release API reports,
 checks the macOS code signature on signed builds, and never
 self-elevates.

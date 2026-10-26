@@ -4,11 +4,11 @@
  * See LICENSE file for full license text
  */
 
-//! `distrofs update` and `distrofs fetch-servers`.
+//! `container-mount update` and `container-mount fetch-servers`.
 //!
-//! `update` self-updates an installed `distrofs` to a GitHub release:
+//! `update` self-updates an installed `container-mount` to a GitHub release:
 //! fetch the release, compare versions (consent for a downgrade or
-//! reinstall), download the `distrofs-<triple>-v<ver>.tar.gz` asset,
+//! reinstall), download the `container-mount-<triple>-v<ver>.tar.gz` asset,
 //! verify the API-reported SHA-256 and — on macOS — that the binary
 //! satisfies `anchor apple generic` under a Developer ID whose team
 //! matches the installed copy's, then swap it into place (plus any
@@ -16,11 +16,11 @@
 //! run as root.
 //!
 //! `fetch-servers` is the package-installer path: download just the
-//! `distrofs-servers-<ver>.tar.gz` asset into the libexec dir so a
+//! `container-mount-servers-<ver>.tar.gz` asset into the libexec dir so a
 //! `cargo install`/`cargo binstall` user gets guest servers without
 //! building them.
 //!
-//! Both go through [`distrofs::release`]; `DISTROFS_RELEASES_URL`
+//! Both go through [`container_mount::release`]; `CONTAINER_MOUNT_RELEASES_URL`
 //! applies only under `--dev` (see there for the security rule).
 
 use std::cmp::Ordering;
@@ -33,14 +33,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use distrofs::release::{
+use container_mount::release::{
     Asset, cmp_version, consent, download, fetch_release, find_asset, is_root, untar,
 };
-use distrofs::servers;
+use container_mount::servers;
 
 /// Our code-signing identifier — what releases sign the binary as.
 #[cfg(target_os = "macos")]
-const IDENTIFIER: &str = "io.github.daphnediane.distrofs";
+const IDENTIFIER: &str = "io.github.daphnediane.container-mount";
 
 /// The `rustc --print target` triple for this build.
 fn host_triple() -> &'static str {
@@ -59,7 +59,7 @@ fn current_exe() -> Result<PathBuf> {
     Ok(exe.canonicalize().unwrap_or(exe))
 }
 
-/// `distrofs update [--version V] [--dry-run] [--force]`.
+/// `container-mount update [--version V] [--dry-run] [--force]`.
 pub fn run(args: &[String], dev: bool) -> Result<()> {
     let mut version = None;
     let mut dry_run = false;
@@ -78,7 +78,7 @@ pub fn run(args: &[String], dev: bool) -> Result<()> {
 
 fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Result<()> {
     if is_root() {
-        bail!("run without sudo — distrofs never self-elevates");
+        bail!("run without sudo — container-mount never self-elevates");
     }
     let exe = current_exe()?;
     // A copy managed by another package (container-distro's plugin
@@ -89,7 +89,7 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
     {
         bail!(
             "{} lives in the container plugins directory — that copy belongs to \
-             `container distro` and is replaced by it, not by distrofs update",
+             `container distro` and is replaced by it, not by container-mount update",
             exe.display()
         );
     }
@@ -112,16 +112,16 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
     let current = env!("CARGO_PKG_VERSION");
     match cmp_version(current, &tag) {
         Ordering::Equal if !force => {
-            println!("distrofs {tag} is already installed (--force to reinstall)");
+            println!("container-mount {tag} is already installed (--force to reinstall)");
             return Ok(());
         }
-        Ordering::Equal => eprintln!("reinstalling distrofs {tag}"),
+        Ordering::Equal => eprintln!("reinstalling container-mount {tag}"),
         Ordering::Greater => consent(
             &format!("{tag} is older than the installed {current}"),
-            &format!("Downgrade distrofs to {tag}? [y/N] "),
+            &format!("Downgrade container-mount to {tag}? [y/N] "),
             force,
         )?,
-        Ordering::Less => eprintln!("updating distrofs {current} -> {tag}"),
+        Ordering::Less => eprintln!("updating container-mount {current} -> {tag}"),
     }
 
     let asset = pick_client_asset(&release, &tag, force)?;
@@ -133,19 +133,19 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
     let _ = std::fs::remove_dir_all(&work);
     untar(&tarball, &work)?;
     let unpacked = one_dir(&work)?;
-    let new_bin = unpacked.join("distrofs");
+    let new_bin = unpacked.join("container-mount");
     if !new_bin.is_file() {
         let _ = std::fs::remove_dir_all(&work);
-        bail!("{} didn't contain a distrofs binary", asset.name);
+        bail!("{} didn't contain a container-mount binary", asset.name);
     }
 
-    // The stamp proves it's a distrofs build; on macOS codesign proves
+    // The stamp proves it's a container-mount build; on macOS codesign proves
     // provenance, and the team must match the installed copy's.
     let (ver, _) = servers::stamped(&new_bin)?;
     check_new_binary(&new_bin, &exe, force)?;
     let mut servers_ok = Vec::new();
     for arch in servers::Arch::ALL {
-        let s = unpacked.join(format!("distrofs-server-{}", arch.suffix()));
+        let s = unpacked.join(format!("container-mount-server-{}", arch.suffix()));
         if s.is_file() {
             servers::stamped(&s)
                 .with_context(|| format!("{} failed its version-stamp check", s.display()))?;
@@ -155,7 +155,7 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
 
     if dry_run {
         println!(
-            "dry run — would replace {} with {} (distrofs {ver}){}",
+            "dry run — would replace {} with {} (container-mount {ver}){}",
             exe.display(),
             asset.name,
             if servers_ok.is_empty() {
@@ -170,12 +170,12 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
 
     install(&exe, &new_bin, &servers_ok)?;
     let _ = std::fs::remove_dir_all(&work);
-    println!("updated {} to distrofs {tag}", exe.display());
+    println!("updated {} to container-mount {tag}", exe.display());
     Ok(())
 }
 
-/// `distrofs fetch-servers [--version V] [--prefix DIR]` — install the
-/// release's server binaries into `<prefix>/libexec/distrofs` (default:
+/// `container-mount fetch-servers [--version V] [--prefix DIR]` — install the
+/// release's server binaries into `<prefix>/libexec/container-mount` (default:
 /// the running binary's own install dir).
 pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
     let mut version = None;
@@ -191,7 +191,7 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
         }
     }
     let (tag, rel) = fetch_release(version.as_deref(), dev)?;
-    let name = format!("distrofs-servers-{tag}.tar.gz");
+    let name = format!("container-mount-servers-{tag}.tar.gz");
     let asset =
         find_asset(&rel, &name).with_context(|| format!("release {tag} has no {name} asset"))?;
     let dir = download_dir()?;
@@ -203,10 +203,10 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
     let unpacked = one_dir(&work)?;
 
     let dest = match prefix {
-        Some(p) => p.join("libexec").join("distrofs"),
+        Some(p) => p.join("libexec").join("container-mount"),
         None => servers::server_dir_for(&current_exe()?).with_context(|| {
-            "this distrofs has no install prefix — pass --prefix DIR \
-             (servers land in DIR/libexec/distrofs)"
+            "this container-mount has no install prefix — pass --prefix DIR \
+             (servers land in DIR/libexec/container-mount)"
                 .to_string()
         })?,
     };
@@ -214,7 +214,7 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
 
     let mut installed = 0;
     for arch in servers::Arch::ALL {
-        let s = unpacked.join(format!("distrofs-server-{}", arch.suffix()));
+        let s = unpacked.join(format!("container-mount-server-{}", arch.suffix()));
         if !s.is_file() {
             continue;
         }
@@ -231,7 +231,7 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
     }
     let _ = std::fs::remove_dir_all(&work);
     if installed == 0 {
-        bail!("{name} contained no distrofs-server-* binaries");
+        bail!("{name} contained no container-mount-server-* binaries");
     }
     Ok(())
 }
@@ -254,12 +254,12 @@ fn download_dir() -> Result<PathBuf> {
             let s = std::ffi::CStr::from_bytes_until_nul(&buf).unwrap();
             return Ok(
                 PathBuf::from(std::ffi::OsStr::from_bytes(s.to_bytes()).to_os_string())
-                    .join("distrofs"),
+                    .join("container-mount"),
             );
         }
     }
     // SAFETY: getuid cannot fail.
-    Ok(std::env::temp_dir().join(format!("distrofs-{}", unsafe { libc::getuid() })))
+    Ok(std::env::temp_dir().join(format!("container-mount-{}", unsafe { libc::getuid() })))
 }
 
 /// The single top-level directory (or the dir itself) an extracted
@@ -286,10 +286,10 @@ fn pick_client_asset(release: &serde_json::Value, tag: &str, force: bool) -> Res
             std::env::consts::OS
         );
     }
-    if let Some(a) = find_asset(release, &format!("distrofs-{triple}-v{tag}.tar.gz")) {
+    if let Some(a) = find_asset(release, &format!("container-mount-{triple}-v{tag}.tar.gz")) {
         return Ok(a);
     }
-    let unsigned = format!("distrofs-{triple}-v{tag}-unsigned.tar.gz");
+    let unsigned = format!("container-mount-{triple}-v{tag}-unsigned.tar.gz");
     match find_asset(release, &unsigned) {
         Some(a) => {
             consent(
@@ -299,7 +299,7 @@ fn pick_client_asset(release: &serde_json::Value, tag: &str, force: bool) -> Res
             )?;
             Ok(a)
         }
-        None => bail!("release {tag} has no distrofs tarball for {triple}"),
+        None => bail!("release {tag} has no container-mount tarball for {triple}"),
     }
 }
 

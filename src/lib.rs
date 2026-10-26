@@ -4,12 +4,12 @@
  * See LICENSE file for full license text
  */
 
-//! distrofs — a small file server for Linux guests and its validating
-//! host client (docs/design/distrofs.md).
+//! container-mount — a small file server for Linux guests and its validating
+//! host client (docs/design/protocol.md).
 //!
-//! `distrofs serve` runs in the guest on a socket the VM relays to the
+//! `container-mount serve` runs in the guest on a socket the VM relays to the
 //! host; the [`client`] and [`connect`] halves are what a host program —
-//! the `distrofs` CLI itself today, an FSKit file system in the future —
+//! the `container-mount` CLI itself today, an FSKit file system in the future —
 //! uses to reach the guest's files. [`proto`] is the shared wire
 //! protocol, [`symlink`] the confinement rules, and [`servers`] /
 //! [`release`] locate and download server builds.

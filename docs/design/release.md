@@ -10,7 +10,7 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
 ## Versioning
 
 - One version for the package, in the root `Cargo.toml`
-  (`[package].version`); the `distrofs` binary and library share it.
+  (`[package].version`); the `container-mount` binary and library share it.
 - [SemVer]: `MAJOR.MINOR.PATCH`. Pre-1.0, minor bumps (`0.x.0`) may
   break CLI and wire-protocol behavior; patch bumps (`0.x.y`) are
   fixes only. The wire protocol has its own version (`proto::VERSION`,
@@ -58,8 +58,8 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
 
    ```bash
    scripts/build-pkg-signed.sh   # signs + notarizes/staples
-   gh release upload vX.Y.Z scratch/pkg/distrofs-X.Y.Z.pkg \
-       scratch/pkg/distrofs-aarch64-apple-darwin-vX.Y.Z.tar.gz \
+   gh release upload vX.Y.Z scratch/pkg/container-mount-X.Y.Z.pkg \
+       scratch/pkg/container-mount-aarch64-apple-darwin-vX.Y.Z.tar.gz \
        --clobber
    ```
 
@@ -67,7 +67,7 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
    --draft=false`).
 7. crates.io publish is deferred — see [work]; until decided, install
    paths are the pkg, binstall tarball, `cargo install --path`, and
-   `distrofs update`/`fetch-servers`.
+   `container-mount update`/`fetch-servers`.
 8. Close the issues the release resolves, naming `vX.Y.Z` in each
    comment.
 9. Re-open development on `main`:

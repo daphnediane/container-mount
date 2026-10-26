@@ -9,7 +9,7 @@
 #
 #   tests/e2e.sh [--engine ENGINE] [--arch arm64|amd64] [--keep]
 #
-# Builds `target/<arch>-unknown-linux-musl/release/distrofs` and the
+# Builds `target/<arch>-unknown-linux-musl/release/container-mount` and the
 # debug host client as needed.
 
 set -euo pipefail
@@ -52,8 +52,8 @@ TARGET="$ARCH-unknown-linux-musl"
 
 # --- build ------------------------------------------------------------
 
-SERVER="target/$TARGET/release/distrofs"
-CLIENT="target/debug/distrofs"
+SERVER="target/$TARGET/release/container-mount"
+CLIENT="target/debug/container-mount"
 # Always hand the builds to cargo — it no-ops on fresh sources and a
 # stale binary here costs a debugging session.
 log "building $TARGET server and host client"
@@ -61,9 +61,9 @@ cargo build --release --target "$TARGET" >/dev/null
 cargo build >/dev/null
 [ -x "$SERVER" ] && [ -x "$CLIENT" ] || die "builds missing"
 
-NAME="distrofs-e2e-$$"
+NAME="container-mount-e2e-$$"
 TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-export DISTROFS_TOKEN="$TOKEN"
+export CONTAINER_MOUNT_TOKEN="$TOKEN"
 
 SCRATCH="scratch/e2e-$NAME"
 mkdir -p "$SCRATCH"
@@ -76,30 +76,30 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Image: alpine rootfs + the static server as /distrofs. Alpine gives
+# Image: alpine rootfs + the static server as /container-mount. Alpine gives
 # us /bin/sh in the guest to stage links/files for confinement tests.
-cp "$SERVER" "$SCRATCH/distrofs"
-printf 'FROM alpine\nCOPY distrofs /distrofs\n' > "$SCRATCH/Dockerfile"
+cp "$SERVER" "$SCRATCH/container-mount"
+printf 'FROM alpine\nCOPY container-mount /container-mount\n' > "$SCRATCH/Dockerfile"
 
 case "$ENGINE" in
     container)
-        "$ENGINE" build -t distrofs-e2e -f "$SCRATCH/Dockerfile" "$SCRATCH" >/dev/null
+        "$ENGINE" build -t container-mount-e2e -f "$SCRATCH/Dockerfile" "$SCRATCH" >/dev/null
         HOST_SOCK="$("$CLIENT" socket-path "$NAME")"
         "$ENGINE" run -d --name "$NAME" \
-            -e DISTROFS_TOKEN \
-            --publish-socket "$HOST_SOCK":/var/lib/distrofs/distrofs.sock \
-            distrofs-e2e /distrofs serve \
-            --socket /var/lib/distrofs/distrofs.sock --idle-secs 300 \
+            -e CONTAINER_MOUNT_TOKEN \
+            --publish-socket "$HOST_SOCK":/var/lib/container-mount/container-mount.sock \
+            container-mount-e2e /container-mount serve \
+            --socket /var/lib/container-mount/container-mount.sock --idle-secs 300 \
             >/dev/null
         PEER_REQ='identifier "com.apple.container.container-runtime-linux" and anchor apple generic and certificate leaf[subject.OU] = "UPBK2H6LZM"'
         CARGS=(--socket "$HOST_SOCK" --peer-requirement "$PEER_REQ")
         ;;
     podman|docker)
-        "$ENGINE" build -t distrofs-e2e -f "$SCRATCH/Dockerfile" "$SCRATCH" >/dev/null
+        "$ENGINE" build -t container-mount-e2e -f "$SCRATCH/Dockerfile" "$SCRATCH" >/dev/null
         "$ENGINE" run -d --name "$NAME" \
-            -e DISTROFS_TOKEN \
+            -e CONTAINER_MOUNT_TOKEN \
             -p 127.0.0.1::8765 \
-            distrofs-e2e /distrofs serve --listen tcp:0.0.0.0:8765 \
+            container-mount-e2e /container-mount serve --listen tcp:0.0.0.0:8765 \
             --idle-secs 300 >/dev/null
         PORT="$("$ENGINE" port "$NAME" 8765/tcp | head -1 | sed 's/.*://')"
         [ -n "$PORT" ] || die "couldn't learn the published port"
@@ -107,7 +107,7 @@ case "$ENGINE" in
         ;;
 esac
 
-cli() { DISTROFS_TOKEN="$TOKEN" "$CLIENT" --timeout 15 "${CARGS[@]}" "$@"; }
+cli() { CONTAINER_MOUNT_TOKEN="$TOKEN" "$CLIENT" --timeout 15 "${CARGS[@]}" "$@"; }
 
 log "engine=$ENGINE arch=$ARCH — waiting for the server"
 ok=0
@@ -170,7 +170,7 @@ echo "$out" | grep -q 'target: ../etc/hostname' \
     && log "PASS escape-link clamped at root" || { log "FAIL escape-link ($out)"; fail=1; }
 
 # A wrong token must never handshake.
-if DISTROFS_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
+if CONTAINER_MOUNT_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
     "$CLIENT" --timeout 3 "${CARGS[@]}" check >/dev/null 2>&1; then
     log "FAIL bad token authenticated"
     fail=1

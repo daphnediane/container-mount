@@ -1,6 +1,6 @@
 # Protocol and transport
 
-The wire protocol, transports, and client-side validation distrofs
+The wire protocol, transports, and client-side validation container-mount
 implements. Companion to [security.md](security.md) (threat model) and
 [filesystems.md](filesystems.md) (observed host/guest fs behavior).
 The deploying side of the integration — how container-distro starts
@@ -58,16 +58,16 @@ listener exists.
 ## Handshake (mutual)
 
 ```text
-server → ServerHello { magic = "distrofs", version, server_nonce[32] }
-client → ClientAuth  { version, client_nonce[32], mac_c = HMAC-SHA256(token, "distrofs/c" ‖ server_nonce) }
-server → ServerAuth  { mac_s = HMAC-SHA256(token, "distrofs/s" ‖ client_nonce), caps, root attributes }
+server → ServerHello { magic = "container-mount", version, server_nonce[32] }
+client → ClientAuth  { version, client_nonce[32], mac_c = HMAC-SHA256(token, "container-mount/c" ‖ server_nonce) }
+server → ServerAuth  { mac_s = HMAC-SHA256(token, "container-mount/s" ‖ client_nonce), caps, root attributes }
 ```
 
 The client proves the token too: a guest-local process that reaches
 the socket must not get a root file server. `mac_c` is checked in
 constant time; a failure closes the connection without detail. The
 token is 32 random bytes per server instance, supplied via
-`DISTROFS_TOKEN`. Nonces stop replay across instances.
+`CONTAINER_MOUNT_TOKEN`. Nonces stop replay across instances.
 
 ## Framing and messages
 
@@ -249,8 +249,8 @@ and Finder get identical enforcement.
 
 ## Version stamp
 
-Every `distrofs` build embeds a scannable stamp —
-`distrofs-version:<version>:protocol:<n>` — so server discovery can
+Every `container-mount` build embeds a scannable stamp —
+`container-mount-version:<version>:protocol:<n>` — so server discovery can
 reject a stale or misplaced binary before launching it rather than
 surfacing a failed exec or a hung handshake. The stamp may carry
 trailing `key:value` pairs (build identity — `commit`, `dirty`);

@@ -38,8 +38,8 @@ globs: **/*.rs,**/Cargo.toml
 
 ## Running binaries
 
-- Run `cargo run --bin distrofs -- <args>` when exercising the binary,
-  not `./target/debug/distrofs`. `cargo run` rebuilds as needed;
+- Run `cargo run --bin container-mount -- <args>` when exercising the binary,
+  not `./target/debug/container-mount`. `cargo run` rebuilds as needed;
   invoking the binary directly silently uses whatever was last
   compiled, which is stale when only `check`/`clippy`/`test --lib` ran
   since the edits.

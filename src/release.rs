@@ -10,7 +10,7 @@
 //!
 //! Downloads go through the platform `curl`/`tar` instead of an HTTP
 //! crate — the crate stays pure-Rust so the musl server build needs no
-//! cross C toolchain. `DISTROFS_RELEASES_URL` overrides the API base
+//! cross C toolchain. `CONTAINER_MOUNT_RELEASES_URL` overrides the API base
 //! for testing (point it at a local static tree mirroring
 //! `<base>/releases/latest`, `<base>/releases/tags/vX.Y.Z`, and the
 //! asset `browser_download_url`s); it is honored only when the caller
@@ -32,7 +32,7 @@ use sha2::{Digest, Sha256};
 /// `repository`, restated here so a typo can't redirect the download.
 pub const REPO: &str = "daphnediane/container-mount";
 /// The dev-only override for the releases API base.
-pub const RELEASES_URL_ENV: &str = "DISTROFS_RELEASES_URL";
+pub const RELEASES_URL_ENV: &str = "CONTAINER_MOUNT_RELEASES_URL";
 
 /// The releases API base — api.github.com normally, the env override
 /// only under `--dev`.
@@ -295,12 +295,12 @@ mod tests {
         let r = serde_json::json!({
             "tag_name": "v0.1.0",
             "assets": [{
-                "name": "distrofs-servers-0.1.0.tar.gz",
+                "name": "container-mount-servers-0.1.0.tar.gz",
                 "browser_download_url": "https://example/x",
                 "digest": "sha256:aaaa",
             }],
         });
-        let a = find_asset(&r, "distrofs-servers-0.1.0.tar.gz").unwrap();
+        let a = find_asset(&r, "container-mount-servers-0.1.0.tar.gz").unwrap();
         assert_eq!(a.sha256.as_deref(), Some("aaaa"));
         assert!(find_asset(&r, "nope").is_none());
     }

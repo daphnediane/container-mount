@@ -4,7 +4,7 @@
  * See LICENSE file for full license text
  */
 
-//! Reaching a distrofs server: transports, socket-path hygiene, and
+//! Reaching a container-mount server: transports, socket-path hygiene, and
 //! peer identity.
 //!
 //! Whoever launches `serve` also decides how the host reaches it —
@@ -30,7 +30,7 @@
 //!    ([`crate::client`]).
 //!
 //! `socket-path KEY` hands callers a managed location under the
-//! per-user temp dir (`<temp>/distrofs/s/<key-hash>.sock`), so an
+//! per-user temp dir (`<temp>/container-mount/s/<key-hash>.sock`), so an
 //! embedder doesn't have to invent a safe layout itself.
 
 use std::ffi::{CStr, CString};
@@ -54,7 +54,7 @@ use crate::proto::hex;
 const SUN_PATH_MAX: usize = 103;
 
 /// Directory namespace for [`socket_path`] under the per-user temp dir.
-const SOCKET_NS: &str = "distrofs";
+const SOCKET_NS: &str = "container-mount";
 
 /// How a client reaches the server.
 #[derive(Debug, Clone, PartialEq)]
@@ -276,7 +276,7 @@ fn private_socket_dir(base: &Path) -> io::Result<PathBuf> {
 }
 
 /// The managed host socket path for `key`:
-/// `<user temp>/distrofs/s/<16 hex of SHA-256(key)>.sock`.
+/// `<user temp>/container-mount/s/<16 hex of SHA-256(key)>.sock`.
 /// Creates and verifies the private directory chain; fails if the
 /// path would exceed `sun_path`.
 pub fn socket_path(key: &str) -> Result<PathBuf> {
@@ -412,7 +412,7 @@ pub fn open(
                     .downcast_ref::<io::Error>()
                     .is_some_and(|io| io.kind() == io::ErrorKind::PermissionDenied);
                 if trust || Instant::now() >= deadline {
-                    return Err(e).context("couldn't open a distrofs session");
+                    return Err(e).context("couldn't open a container-mount session");
                 }
             }
         }
@@ -614,7 +614,7 @@ mod tests {
         assert_eq!(a, b);
         assert_ne!(a, socket_path("other-key").unwrap());
         assert!(a.as_os_str().len() <= SUN_PATH_MAX, "{}", a.display());
-        assert!(a.parent().unwrap().ends_with("distrofs/s"));
+        assert!(a.parent().unwrap().ends_with("container-mount/s"));
     }
 
     #[test]

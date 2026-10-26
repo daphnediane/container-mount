@@ -11,15 +11,15 @@
 # existing target/release builds.
 #
 # Assets produced (the names fetch-servers/update look for):
-#   distrofs-<ver>.pkg / distrofs-<ver>-unsigned.pkg
-#   distrofs-servers-<ver>.tar.gz          — both musl servers
-#   distrofs-<triple>-v<ver>.tar.gz        — signed client + servers
-#   distrofs-<triple>-v<ver>-unsigned.tar.gz  — unsigned variant
+#   container-mount-<ver>.pkg / container-mount-<ver>-unsigned.pkg
+#   container-mount-servers-<ver>.tar.gz          — both musl servers
+#   container-mount-<triple>-v<ver>.tar.gz        — signed client + servers
+#   container-mount-<triple>-v<ver>-unsigned.tar.gz  — unsigned variant
 #
 # Signing is auto-detected (docs/design/packaging.md):
 #   --sign           require signing — fail when the identities are absent
 #   --no-sign        force the -unsigned artifacts even with certs present
-#   CODESIGN_IDENTITY  signs the distrofs binary (default: a "Developer ID
+#   CODESIGN_IDENTITY  signs the container-mount binary (default: a "Developer ID
 #                      Application" keychain identity, if present)
 #   PKG_SIGN_IDENTITY  signs the .pkg (default: "Developer ID Installer")
 #   NOTARY_PROFILE     notarytool keychain profile — when set, the signed
@@ -45,8 +45,8 @@ done
 OUT=scratch/pkg
 # Stale artifacts from a prior run must not leak into a release glob.
 rm -rf "$OUT"
-COMPONENT=distrofs-core.pkg
-IDENTIFIER=io.github.daphnediane.distrofs
+COMPONENT=container-mount-core.pkg
+IDENTIFIER=io.github.daphnediane.container-mount
 TARGET=aarch64-apple-darwin
 MUSL_A=aarch64-unknown-linux-musl
 MUSL_X=x86_64-unknown-linux-musl
@@ -76,15 +76,15 @@ if [ -z "$SKIP_BUILD" ]; then
     fi
 fi
 
-[ -x "$R/distrofs" ] && [ -x "$TA/distrofs" ] && [ -x "$TX/distrofs" ] || {
+[ -x "$R/container-mount" ] && [ -x "$TA/container-mount" ] && [ -x "$TX/container-mount" ] || {
     echo "release binaries missing — run without --skip-build" >&2
     exit 1
 }
-otool -l "$R/distrofs" | grep -q dep-v0 || \
-    echo "  note: distrofs has no .dep-v0 dep tree (not built via cargo auditable)"
+otool -l "$R/container-mount" | grep -q dep-v0 || \
+    echo "  note: container-mount has no .dep-v0 dep tree (not built via cargo auditable)"
 
 step "CycloneDX SBOM"
-SBOM="distrofs-$version-sbom.cdx"
+SBOM="container-mount-$version-sbom.cdx"
 mkdir -p "$OUT"
 rm -f "$OUT/$SBOM.json"
 if command -v cargo-cyclonedx >/dev/null; then
@@ -116,9 +116,9 @@ if [ "$SIGN" = 1 ] && { [ -z "$APP_IDENTITY" ] || [ -z "$PKG_IDENTITY" ]; }; the
 fi
 
 if [ -n "$APP_IDENTITY" ]; then
-    step "codesign distrofs ($APP_IDENTITY)"
+    step "codesign container-mount ($APP_IDENTITY)"
     codesign --force --sign "$APP_IDENTITY" \
-        --options runtime --timestamp "$R/distrofs"
+        --options runtime --timestamp "$R/container-mount"
 fi
 
 step "stage payload"
@@ -127,17 +127,17 @@ step "stage payload"
 # what we actually own.
 PAYLOAD="$OUT/payload"
 rm -rf "$PAYLOAD"
-mkdir -p "$PAYLOAD/bin" "$PAYLOAD/libexec/distrofs" \
-    "$PAYLOAD/share/doc/distrofs"
-cp "$R/distrofs" packaging/uninstall-distrofs.sh \
-    packaging/update-distrofs.sh "$PAYLOAD/bin/"
-cp "$TA/distrofs" "$PAYLOAD/libexec/distrofs/distrofs-server-aarch64"
-cp "$TX/distrofs" "$PAYLOAD/libexec/distrofs/distrofs-server-x86_64"
-cp LICENSE THIRD-PARTY-NOTICES.yaml "$PAYLOAD/share/doc/distrofs/"
+mkdir -p "$PAYLOAD/bin" "$PAYLOAD/libexec/container-mount" \
+    "$PAYLOAD/share/doc/container-mount"
+cp "$R/container-mount" packaging/uninstall-container-mount.sh \
+    packaging/update-container-mount.sh "$PAYLOAD/bin/"
+cp "$TA/container-mount" "$PAYLOAD/libexec/container-mount/container-mount-server-aarch64"
+cp "$TX/container-mount" "$PAYLOAD/libexec/container-mount/container-mount-server-x86_64"
+cp LICENSE THIRD-PARTY-NOTICES.yaml "$PAYLOAD/share/doc/container-mount/"
 
 step "pkgbuild"
 # The component pkg is an intermediate, not a release asset — keep it
-# in a subdir so a scratch/pkg/distrofs-*.pkg glob can't pick it up.
+# in a subdir so a scratch/pkg/container-mount-*.pkg glob can't pick it up.
 COMPONENT_DIR=$OUT/component
 mkdir -p "$COMPONENT_DIR"
 pkgbuild --root "$PAYLOAD" \
@@ -163,7 +163,7 @@ cp packaging/welcome.html packaging/conclusion.html "$RESOURCES/"
     echo "======================================================================"
     echo "Third-party components"
     echo
-    echo "distrofs is built with these Rust crates. The complete"
+    echo "container-mount is built with these Rust crates. The complete"
     echo "copyright and license texts are reproduced in"
     echo "THIRD-PARTY-NOTICES.yaml, installed alongside the binary and"
     echo "attached to each GitHub Release."
@@ -177,7 +177,7 @@ cp packaging/welcome.html packaging/conclusion.html "$RESOURCES/"
 # A signed pkg keeps the clean name; unsigned builds (CI without a
 # keychain) get the -unsigned convention — the maintainer adds the
 # signed build at draft-review time (docs/design/packaging.md).
-PKGNAME="distrofs-$version"
+PKGNAME="container-mount-$version"
 [ -n "$PKG_IDENTITY" ] || PKGNAME="$PKGNAME-unsigned"
 if [ -n "$PKG_IDENTITY" ]; then
     productbuild --distribution "$OUT/Distribution.xml" \
@@ -199,25 +199,25 @@ if [ -n "${NOTARY_PROFILE:-}" ] && [ -n "$PKG_IDENTITY" ]; then
 fi
 
 step "server bundle tarball"
-# distrofs-servers-<ver>.tar.gz — what `distrofs fetch-servers`
+# container-mount-servers-<ver>.tar.gz — what `container-mount fetch-servers`
 # downloads.
-SDIR="distrofs-servers-$version"
+SDIR="container-mount-servers-$version"
 rm -rf "$OUT/$SDIR" "$OUT/$SDIR.tar.gz"
 mkdir -p "$OUT/$SDIR"
-cp "$PAYLOAD/libexec/distrofs"/distrofs-server-* "$OUT/$SDIR/"
+cp "$PAYLOAD/libexec/container-mount"/container-mount-server-* "$OUT/$SDIR/"
 tar -czf "$OUT/$SDIR.tar.gz" -C "$OUT" "$SDIR"
 rm -rf "$OUT/$SDIR"
 
 step "cargo-binstall tarball"
 # { name }-{ target }-v{ version }.tar.gz with a matching inner dir —
 # the layout [package.metadata.binstall] in Cargo.toml advertises —
-# plus the server binaries, which `distrofs update` installs beside
+# plus the server binaries, which `container-mount update` installs beside
 # them. Signed binary ⇒ clean name; unsigned ⇒ -unsigned (what
 # `update` picks only with consent).
-TDIR="distrofs-$TARGET-v$version"
+TDIR="container-mount-$TARGET-v$version"
 rm -rf "$OUT/$TDIR" "$OUT/$TDIR.tar.gz" "$OUT/$TDIR-unsigned.tar.gz"
 mkdir -p "$OUT/$TDIR"
-cp "$R/distrofs" "$PAYLOAD/libexec/distrofs"/distrofs-server-* \
+cp "$R/container-mount" "$PAYLOAD/libexec/container-mount"/container-mount-server-* \
     LICENSE THIRD-PARTY-NOTICES.yaml "$OUT/$TDIR/"
 TARNAME="$TDIR"
 [ -n "$APP_IDENTITY" ] || TARNAME="$TDIR-unsigned"

@@ -1,6 +1,6 @@
 # Mount back-ends: reaching any container
 
-How distrofs can serve containers other than container-distro's
+How container-mount can serve containers other than container-distro's
 distros — running containers created by plain `container run`, `FROM
 scratch` images, machines, and stopped or never-booted disks — so a
 `podman mount`-style `container mount ID [DIR]` plugin can sit on top,
@@ -32,7 +32,7 @@ deployment this generalizes).
 - **The plugin owns the mechanics; container-distro only calls it.**
   `container mount` (shipped from this repo) holds the servers,
   tokens, transports, and helper VMs. container-distro knows no
-  distrofs protocol, binary, or socket layout: it runs `container
+  container-mount protocol, binary, or socket layout: it runs `container
   mount` commands and, optionally, passes through create-time
   references the plugin hands it as JSON.
 - **vsock dial reaches any running container with no create-time
@@ -78,7 +78,7 @@ registered for the local engine only (`registry.EngineMode:
 registry.ABIMode` in `cmd/podman/containers/mount.go`) — so the
 remote client used with `podman machine` on a Mac doesn't have it. There
 is no prior art on macOS to copy; the closest model is WSL's
-`\\wsl$`, which is the guest-served shape distrofs already has.
+`\\wsl$`, which is the guest-served shape container-mount already has.
 
 ## The three choices
 
@@ -87,7 +87,7 @@ A back-end picks one answer from each:
 1. **Where the server runs** — in the target's own VM (live view,
    target must be running) or in a helper VM that boots the target's
    disk (target stopped, or a snapshot of a running one).
-2. **Delivery** — how a `distrofs` server binary gets into that VM.
+2. **Delivery** — how a `container-mount` server binary gets into that VM.
 3. **Transport** — how the host gets a connected stream to it.
 
 The handshake, protocol, and client-side validation are identical in
@@ -108,11 +108,11 @@ every cell; the client only ever sees a socket or an fd.
 
 **Assets volume (reverted).** container-distro copied the server
 into each distro's read-only `/sbin.distro` assets. That ties
-container-distro to distrofs's binaries and layout, which the plugin
+container-distro to container-mount's binaries and layout, which the plugin
 design below removes; it stays parked on container-distro's
 `feature/distrofs` branch.
 
-**Read-only servers share.** `-v <prefix>/libexec/distrofs:/.distrofs:ro`
+**Read-only servers share.** `-v <prefix>/libexec/container-mount:/.container-mount:ro`
 at create time puts the server binaries in the guest with no copy,
 works for `FROM scratch` images, and picks up new builds live. A
 plugin can't inject flags into `container run`, so this is opt-in:
@@ -219,7 +219,7 @@ Shape:
 
 - **Root disk:** the target's ext4 (or a clone of it).
 - **Entrypoint:** the server, from a read-only servers share —
-  `--entrypoint /.distrofs/distrofs-server-<arch> serve …`, the same
+  `--entrypoint /.container-mount/container-mount-server-<arch> serve …`, the same
   "entrypoint inside a volume" trick distros use for `/sbin.distro/
   init`. The target's own init never runs.
 - **Transport:** vsock dial or `--publish-socket` — the helper is ours,
@@ -285,7 +285,7 @@ Distros get it through `prepare` when container-distro uses it.
   releases lock-step with the servers it launches, and is the one
   place that knows the `container` internals mounts need: the dial
   route, disk locations, the helper VM. It knows nothing of distros.
-- **container-distro knows nothing of distrofs** — no wire protocol,
+- **container-distro knows nothing of container-mount** — no wire protocol,
   no server binaries, no tokens, no socket layout. Its whole
   integration is invoking `container mount` and, optionally, passing
   through the create-time references `prepare` returns. Without the
@@ -339,10 +339,10 @@ and adds a socket relay as a second transport. Sketch:
 {
   "interface": 1,
   "volumes": [
-    { "source": "/usr/local/libexec/distrofs", "destination": "/.distrofs", "readonly": true }
+    { "source": "/usr/local/libexec/container-mount", "destination": "/.container-mount", "readonly": true }
   ],
   "publishSockets": [
-    { "host": "<darwin user temp>/distrofs/s/<hash>.sock", "guest": "/var/lib/distrofs/distrofs.sock" }
+    { "host": "<darwin user temp>/container-mount/s/<hash>.sock", "guest": "/var/lib/container-mount/container-mount.sock" }
   ]
 }
 ```
@@ -363,7 +363,7 @@ and adds a socket relay as a second transport. Sketch:
 ### Compatibility
 
 `container mount version --format json` reports `{ "interface": N,
-"version": "<distrofs version>" }`. container-distro declares the
+"version": "<container-mount version>" }`. container-distro declares the
 interface range it understands and treats anything else as "plugin
 absent", with a message naming both versions. A missing plugin shows
 up as `container`'s unknown-command error, which container-distro maps
@@ -408,7 +408,7 @@ managers' `chown` silently no-ops, and device nodes can't exist. A
 default case-insensitive APFS volume breaks it further. It is also a
 host-security regression: a guest link such as `x -> /etc/passwd`
 sits on the host unchanged, so every host tool that follows it lands
-on a real host file — exactly the escape distrofs's client-side
+on a real host file — exactly the escape container-mount's client-side
 symlink rewriting exists to stop. And metadata-heavy work is why
 upstream backs roots with ext4 block images in the first place.
 
@@ -466,7 +466,7 @@ the code, not before:
   mutating op itself, so the guarantee doesn't rest on how the
   embedder invokes the client.
 - Release layout: the servers directory must be shareable read-only
-  as a unit (it already is — `libexec/distrofs/`).
+  as a unit (it already is — `libexec/container-mount/`).
 - The `mount` plugin binary: the dial client (raw XPC), the
   helper VM, `prepare`/`list`/`version`, and plugin install into
   `container`'s plugin root.
@@ -486,15 +486,8 @@ No GitHub issues are filed for these yet.
 - Plugin verbs vs container ids: `fs`, `list`, `prepare`, and
   `version` are also valid container names. Reserve them, require
   `--` before such a TARGET, or move them under flags?
-- Plugin packaging: a second `[[bin]]` in the `distrofs` crate, or a
-  cargo feature.
-- Crate and protocol names: the repo is now `container-mount` (see
-  [history.md](history.md#rename-to-container-mount)); the crate,
-  binary, protocol, and server names are still `distrofs`, and
-  `container-mount` was unclaimed on crates.io as of 2026-10-25.
-  Nothing depends on the old names yet, so whether to rename them is
-  open until the first release; the crate name also ties into the
-  crates.io publishing decision ([#1]).
+- Plugin packaging: a second `[[bin]]` in the `container-mount`
+  crate, or a cargo feature.
 - Exclusive-mode lifetime: an FSKit mount outlives any CLI call, so
   something long-lived (the FSKit agent, or a supervisor tied to the
   helper container) must hold the disk. Is `list` enough for
@@ -504,5 +497,4 @@ No GitHub issues are filed for these yet.
 [host-file-access]: https://github.com/daphnediane/container-distro/blob/main/docs/design/host-file-access.md
 [integration levels]: https://github.com/daphnediane/container-distro/blob/main/docs/design/lower-level-integration.md
 [podman-mount(1)]: https://docs.podman.io/en/latest/markdown/podman-mount.1.html
-[#1]: https://github.com/daphnediane/container-mount/issues/1
 [#11]: https://github.com/daphnediane/container-mount/issues/11

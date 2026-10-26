@@ -1,4 +1,4 @@
-root_name: distrofs
+root_name: container-mount
 third_party_libraries:
 - package_name: anyhow
   package_version: 1.0.104

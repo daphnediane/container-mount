@@ -49,10 +49,10 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Guest(e) => write!(f, "{}", io::Error::from_raw_os_error(e.to_darwin())),
-            Error::Io(e) => write!(f, "distrofs connection: {e}"),
-            Error::Protocol(m) => write!(f, "distrofs protocol error: {m}"),
-            Error::Timeout => write!(f, "distrofs request timed out"),
-            Error::Closed => write!(f, "distrofs connection closed"),
+            Error::Io(e) => write!(f, "container-mount connection: {e}"),
+            Error::Protocol(m) => write!(f, "container-mount protocol error: {m}"),
+            Error::Timeout => write!(f, "container-mount request timed out"),
+            Error::Closed => write!(f, "container-mount connection closed"),
         }
     }
 }
@@ -137,7 +137,7 @@ pub struct Resolved {
     pub path: Vec<Vec<u8>>,
 }
 
-/// An authenticated distrofs session. Thread-safe: requests from any
+/// An authenticated container-mount session. Thread-safe: requests from any
 /// thread are pipelined over the one connection.
 pub struct Client {
     stream: Stream,
@@ -155,11 +155,11 @@ impl Client {
     pub fn handshake(mut stream: Stream, token: &[u8]) -> Result<Client> {
         stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
         let hello: ServerHello = read_frame(&mut stream).map_err(|e| match e.kind() {
-            io::ErrorKind::InvalidData => protocol("peer is not a distrofs server"),
+            io::ErrorKind::InvalidData => protocol("peer is not a container-mount server"),
             _ => Error::Io(e),
         })?;
         if hello.magic != MAGIC {
-            return Err(protocol("peer is not a distrofs server"));
+            return Err(protocol("peer is not a container-mount server"));
         }
         if hello.version != VERSION {
             return Err(protocol(format!(
@@ -781,7 +781,7 @@ mod tests {
 
     /// Run a fake server on one end of a socketpair. `mutate` lets a
     /// test misbehave in the handshake.
-    fn fake_server(token: [u8; 32], magic: [u8; 8], prove: bool) -> Stream {
+    fn fake_server(token: [u8; 32], magic: [u8; 15], prove: bool) -> Stream {
         let (client, mut server) = UnixStream::pair().unwrap();
         thread::spawn(move || {
             let nonce = random32().unwrap();
@@ -881,10 +881,13 @@ mod tests {
             .err()
             .unwrap();
         assert!(e.to_string().contains("rejected the session token"), "{e}");
-        let e = Client::handshake(fake_server(TOKEN, *b"notdistr", true), &TOKEN)
+        let e = Client::handshake(fake_server(TOKEN, *b"not-a-container", true), &TOKEN)
             .err()
             .unwrap();
-        assert!(e.to_string().contains("not a distrofs server"), "{e}");
+        assert!(
+            e.to_string().contains("not a container-mount server"),
+            "{e}"
+        );
         let e = Client::handshake(fake_server(TOKEN, MAGIC, false), &TOKEN)
             .err()
             .unwrap();

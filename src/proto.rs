@@ -4,10 +4,10 @@
  * See LICENSE file for full license text
  */
 
-//! The distrofs wire protocol (docs/design/distrofs.md).
+//! The container-mount wire protocol (docs/design/protocol.md).
 //!
 //! Shared by the host client ([`crate::client`]) and the guest server
-//! (the `distrofs serve` subcommand), so it may depend only on `std`,
+//! (the `container-mount serve` subcommand), so it may depend only on `std`,
 //! `serde`, `postcard`, and `sha2`.
 //!
 //! Framing is a `u32` little-endian length followed by a postcard
@@ -27,9 +27,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Protocol major version; peers reject any other.
-pub const VERSION: u16 = 1;
-/// First bytes of [`ServerHello`] — rejects non-distrofs listeners early.
-pub const MAGIC: [u8; 8] = *b"distrofs";
+pub const VERSION: u16 = 2;
+/// First bytes of [`ServerHello`] — rejects non-container-mount listeners early.
+pub const MAGIC: [u8; 15] = *b"container-mount";
 /// Upper bound on one frame's payload, checked before allocating.
 pub const MAX_FRAME: usize = 16 << 20;
 /// Upper bound on one `Read`/`Write` payload.
@@ -42,16 +42,16 @@ pub const TARGET_MAX: usize = 4096;
 pub const ROOT: NodeId = 1;
 /// Environment variable carrying the hex session token — the handshake
 /// contract between whoever launches `serve` and the client.
-pub const TOKEN_ENV: &str = "DISTROFS_TOKEN";
+pub const TOKEN_ENV: &str = "CONTAINER_MOUNT_TOKEN";
 /// Environment variable holding a default socket path for `serve` and
 /// the client commands (a `--socket`/`--listen` flag overrides it).
-pub const SOCKET_ENV: &str = "DISTROFS_SOCKET";
+pub const SOCKET_ENV: &str = "CONTAINER_MOUNT_SOCKET";
 /// The server's default socket path inside a guest — on the rootfs
 /// itself, not a container-namespace tmpfs, because VM-level relays
 /// (vminitd-style) resolve it above the guest mount namespace. Deployments
 /// choose their own path and pass `--socket`/`--listen`; this default is
 /// for standalone use.
-pub const DEFAULT_SOCKET: &str = "/var/lib/distrofs/distrofs.sock";
+pub const DEFAULT_SOCKET: &str = "/var/lib/container-mount/container-mount.sock";
 
 /// `Rename` flag: fail if the destination exists.
 pub const RENAME_NOREPLACE: u32 = 1;
@@ -511,7 +511,7 @@ pub enum ServerMsg {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerHello {
-    pub magic: [u8; 8],
+    pub magic: [u8; 15],
     pub version: u16,
     pub nonce: Nonce,
 }
@@ -542,7 +542,7 @@ pub fn write_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()>
     if body.len() > MAX_FRAME {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "distrofs frame too large",
+            "container-mount frame too large",
         ));
     }
     let mut buf = Vec::with_capacity(4 + body.len());
@@ -560,7 +560,7 @@ pub fn read_frame<R: Read, T: DeserializeOwned>(r: &mut R) -> io::Result<T> {
     if len > MAX_FRAME {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "distrofs frame too large",
+            "container-mount frame too large",
         ));
     }
     let mut body = vec![0u8; len];
@@ -603,13 +603,13 @@ pub fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> Mac {
 /// The client's proof of the token, bound to the server's nonce.
 #[must_use]
 pub fn client_mac(token: &[u8], server_nonce: &Nonce) -> Mac {
-    hmac_sha256(token, &[b"distrofs/c", server_nonce])
+    hmac_sha256(token, &[b"container-mount/c", server_nonce])
 }
 
 /// The server's proof of the token, bound to the client's nonce.
 #[must_use]
 pub fn server_mac(token: &[u8], client_nonce: &Nonce) -> Mac {
-    hmac_sha256(token, &[b"distrofs/s", client_nonce])
+    hmac_sha256(token, &[b"container-mount/s", client_nonce])
 }
 
 /// Constant-time equality for MACs.

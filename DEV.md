@@ -1,6 +1,7 @@
 # Developing container-mount
 
-Building, testing, and releasing the `distrofs` crate and binary. Contributing conventions live in
+Building, testing, and releasing the `container-mount` crate and
+binary. Contributing conventions live in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Prerequisites
@@ -44,7 +45,7 @@ containing the musl server as PID 1, and exercises it through the
 host binary:
 
 - Apple `container`: guest `--socket` relayed to a managed host socket
-  (`distrofs socket-path`), client connects with `--peer-requirement`
+  (`container-mount socket-path`), client connects with `--peer-requirement`
   pinned to the runtime helper's signature — the production-shaped
   path.
 - docker/podman: `serve --listen tcp:` published to a loopback port,
@@ -59,7 +60,7 @@ and bad-token rejection.
 `--dev` is the per-invocation opt-in for seams that would be backdoors
 if the environment alone could enable them:
 
-- `DISTROFS_RELEASES_URL` — redirect release lookups
+- `CONTAINER_MOUNT_RELEASES_URL` — redirect release lookups
   (`fetch-servers`, `update`) at a local fixture tree; honored only
   behind `--dev`.
 - in-tree server discovery — `servers`/`server-path` search the musl
@@ -67,10 +68,10 @@ if the environment alone could enable them:
 
 ## Release assets
 
-`fetch-servers` expects `distrofs-servers-<ver>.tar.gz` containing
-`distrofs-server-aarch64` + `distrofs-server-x86_64`; `update` expects
-`distrofs-<host-triple>-v<ver>.tar.gz` containing the `distrofs`
-binary plus any `distrofs-server-*` it should install. Asset
+`fetch-servers` expects `container-mount-servers-<ver>.tar.gz` containing
+`container-mount-server-aarch64` + `container-mount-server-x86_64`; `update` expects
+`container-mount-<host-triple>-v<ver>.tar.gz` containing the `container-mount`
+binary plus any `container-mount-server-*` it should install. Asset
 integrity is the GitHub API-reported SHA-256 digest, checked before
 install — the digest is the trust root, not the transport.
 
@@ -84,11 +85,11 @@ with the maintainer's Developer ID identities from the gitignored
 
 - `scripts/install-local.sh` — `cargo install --path .` plus
   `scripts/build-servers.sh --install ~/.cargo` (both musl servers
-  into `libexec/distrofs/`).
+  into `libexec/container-mount/`).
 - `scripts/dev-clean.sh` — remove every install: pkg payload, cargo
-  binary, `libexec/distrofs/` server dirs (`-n` previews).
+  binary, `libexec/container-mount/` server dirs (`-n` previews).
 - `scripts/build-servers.sh` — just the musl builds; `--install
-  PREFIX` copies them into `PREFIX/libexec/distrofs/`.
+  PREFIX` copies them into `PREFIX/libexec/container-mount/`.
 - `scripts/release-gate.sh` — the pre-tag gate (above + musl
   clippy/build, notices freshness, e2e when an engine is up).
 

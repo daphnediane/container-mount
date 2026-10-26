@@ -1,6 +1,6 @@
 # Serving beyond Linux, and below the root
 
-`distrofs serve` today exists only for Linux and always serves `/`.
+`container-mount serve` today exists only for Linux and always serves `/`.
 Two relaxations, analyzed here rather than scheduled: a `--root DIR`
 flag (serve a subtree — trivial) and ports to macOS/BSD/Windows
 (substantial; the nested-VM use cases that motivate the

@@ -1,15 +1,15 @@
 # Install layout and update policy
 
-Where distrofs's files live, how the guest servers are discovered and
+Where container-mount's files live, how the guest servers are discovered and
 fetched, what "packaged" means, and the contract for embedders that
 ship their own pinned copy. Companion to [packaging.md](packaging.md)
 (release assets) and [protocol.md](protocol.md) (wire contract). The
 per-OS server work this layout makes room for is analyzed in
 [server-portability.md](server-portability.md).
 
-Nothing here needs a compatibility path: neither distrofs nor a
+Nothing here needs a compatibility path: neither container-mount nor a
 container-distro release that consumes it has shipped, so the old flat
-`distrofs-server-<arch>` names simply never exist.
+`container-mount-server-<arch>` names simply never exist.
 
 ## Canonical layout
 
@@ -17,18 +17,18 @@ Every install root — `/usr/local` for the pkg, `~/.cargo` for cargo
 installs, an embedder's own root — looks the same:
 
 ```text
-bin/distrofs
-libexec/distrofs/<triple>/distrofs[.exe]      one dir per guest platform
-share/doc/distrofs/{LICENSE,THIRD-PARTY-NOTICES.yaml}
-share/man/man1/distrofs*.1                     clap-feature builds
-bin/uninstall-distrofs.sh, bin/update-distrofs.sh   pkg only
+bin/container-mount
+libexec/container-mount/<triple>/container-mount[.exe]      one dir per guest platform
+share/doc/container-mount/{LICENSE,THIRD-PARTY-NOTICES.yaml}
+share/man/man1/container-mount*.1                     clap-feature builds
+bin/uninstall-container-mount.sh, bin/update-container-mount.sh   pkg only
 ```
 
 `<triple>` is the Rust target triple the server was built for.
-Subdirectories (not flat `distrofs-server-<triple>` files) because a
+Subdirectories (not flat `container-mount-server-<triple>` files) because a
 platform can need side-files later — a Windows server ships `.exe`
 plus eventual helpers/manifests — and because it mirrors the in-tree
-`target/<triple>/<profile>/distrofs` dev-build location, so
+`target/<triple>/<profile>/container-mount` dev-build location, so
 `--dev` discovery is the same lookup rooted elsewhere.
 
 ## Guest platforms
@@ -49,28 +49,28 @@ label ↔ aliases for `--triple`:
 `servers` lists every table row (found or not); `server-path --triple
 T` accepts the triple, the label, or a registered alias (`arm64`,
 `amd64` resolve to the linux-musl rows). `fetch-servers` installs one
-`<triple>/distrofs` per row the bundle carries.
+`<triple>/container-mount` per row the bundle carries.
 
 ## Discovery order
 
 `server_path(triple)` tries, in order:
 
-1. under `--dev`: `<repo>/target/<triple>/{release,debug}/distrofs`
+1. under `--dev`: `<repo>/target/<triple>/{release,debug}/container-mount`
    (in-tree builds first, as today);
 2. the **per-user servers dir** — `~/Library/Application
-   Support/distrofs/servers/<triple>/distrofs` on macOS,
-   `${XDG_DATA_HOME:-~/.local/share}/distrofs/servers/<triple>/distrofs`
+   Support/container-mount/servers/<triple>/container-mount` on macOS,
+   `${XDG_DATA_HOME:-~/.local/share}/container-mount/servers/<triple>/container-mount`
    elsewhere;
-3. `<prefix>/libexec/distrofs/<triple>/distrofs` — bundled or
+3. `<prefix>/libexec/container-mount/<triple>/container-mount` — bundled or
    fetch-installed;
-4. when the running exe's own directory is named `distrofs`
-   (a server binary inside `libexec/distrofs/`): sibling
-   `<triple>/distrofs`.
+4. when the running exe's own directory is named `container-mount`
+   (a server binary inside `libexec/container-mount/`): sibling
+   `<triple>/container-mount`.
 
 The per-user dir precedes libexec so an explicit user fetch — a
 hotfix server, a triple the package doesn't ship — shadows the
-bundle without touching package-managed files. It is distrofs's
-first per-user state: `uninstall-distrofs.sh` gains a keep/delete
+bundle without touching package-managed files. It is container-mount's
+first per-user state: `uninstall-container-mount.sh` gains a keep/delete
 prompt for it (the packaging doc's "no per-user state" claim ends
 here).
 
@@ -88,7 +88,7 @@ tag has no release (never-published dev build) the error points at
 `server-path --fetch` is ensure-then-print: an installed server
 prints its path; a missing one is fetched first (to wherever this
 install may write), then printed. That makes server acquisition
-scriptable — `container exec "$(distrofs server-path --triple
+scriptable — `container exec "$(container-mount server-path --triple
 aarch64-unknown-linux-musl --fetch)" …` — and it's where "don't fetch
 what the package already has" lands as behavior.
 
@@ -115,8 +115,8 @@ distro-installed cargo prefix, say) behaves like a packaged one for
 fetch purposes — the feature only changes what "already fetched"
 means, not writability.
 
-A `DISTROFS_SERVER=PATH` explicit-server override, if added, is a
-`--dev` seam — same rule as `DISTROFS_RELEASES_URL` and the
+A `CONTAINER_MOUNT_SERVER=PATH` explicit-server override, if added, is a
+`--dev` seam — same rule as `CONTAINER_MOUNT_RELEASES_URL` and the
 `CONTAINER_CLI`/`DISTROFS` overrides in container-distro.
 
 ## The `clap` feature
@@ -128,7 +128,7 @@ cargo feature, **default on**, with the musl server builds compiled
 
 - feature on: clap-derive frontend, `clap_mangen` man pages, and
   `install-man`/`uninstall-man` subcommands modeled on
-  container-distro's (`<prefix>/share/man/man1/distrofs*.1`,
+  container-distro's (`<prefix>/share/man/man1/container-mount*.1`,
   stale generated-page pruning);
 - feature off: the existing parsers, unchanged. The server build
   carries no clap, keeping the guest artifact small and its
@@ -144,47 +144,47 @@ musl builds neither.
 
 An embedder that wants guaranteed client==server (container-distro's
 plan: per-version copies under its own appdata root, e.g.
-`…/container-distro/distrofs-4.3/`) **fetches and verifies release
-assets itself**. distrofs's side is a documented contract, not a
+`…/container-distro/container-mount-4.3/`) **fetches and verifies release
+assets itself**. container-mount's side is a documented contract, not a
 fetch API:
 
 ```text
-<embedder-root>/distrofs-<ver>/
-    bin/distrofs
-    libexec/distrofs/<triple>/distrofs
+<embedder-root>/container-mount-<ver>/
+    bin/container-mount
+    libexec/container-mount/<triple>/container-mount
 ```
 
-What distrofs guarantees the embedder can rely on:
+What container-mount guarantees the embedder can rely on:
 
 - the servers tarball always mirrors the libexec layout —
-  `<triple>/distrofs` entries — so unpacking it into a prefix
+  `<triple>/container-mount` entries — so unpacking it into a prefix
   reproduces this layout verbatim;
-- the version stamp (below) distinguishes distrofs builds and
+- the version stamp (below) distinguishes container-mount builds and
   reports version + protocol without executing the binary;
 - `servers --dir ROOT` / `server-path --dir ROOT` (planned) audit
   and locate inside a foreign root, so an embedder can query its
   store through the same discovery logic instead of reimplementing it;
 - signed builds always carry identifier
-  `io.github.daphnediane.distrofs` — the requirement container-distro
+  `io.github.daphnediane.container-mount` — the requirement container-distro
   already pins before handing the client a session token.
 
 container-distro-side follow-ups (tracked there, not here): its
 `server_candidates` gains the pinned appdata roots ahead of the
-prefix paths, and drops the pre-release `distrofs-server-aarch64` /
-plain-`distrofs` names this layout retires.
+prefix paths, and drops the pre-release `container-mount-server-aarch64` /
+plain-`container-mount` names this layout retires.
 
 ## Stamp and build identity
 
 The stamp grows optional trailing `key:value` pairs:
 
 ```text
-distrofs-version:<ver>:protocol:<n>:commit:<sha>[:dirty]
+container-mount-version:<ver>:protocol:<n>:commit:<sha>[:dirty]
 ```
 
 `scan_stamp` iterates pairs after the version and ignores unknown
 keys — old scanners still read version+protocol, and further fields
 (`tag`, a build-content hash) can join later. `build-pkg.sh` injects
-the commit via a `DISTROFS_COMMIT` env → `option_env!` (no vergen
+the commit via a `CONTAINER_MOUNT_COMMIT` env → `option_env!` (no vergen
 dependency — musl must stay toolchain-free); `dirty` is set when the
 tree isn't clean. This is the cheap half of version equality:
 an embedder can prove client and server are the *same build*, not

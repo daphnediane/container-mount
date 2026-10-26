@@ -1,7 +1,7 @@
 # Security Policy
 
-container-mount (`distrofs`) is a single-maintainer project; reports
-are handled on a best-effort basis.
+container-mount is a single-maintainer project; reports are handled
+on a best-effort basis.
 
 ## Supported Versions
 
@@ -31,7 +31,7 @@ reach out.
 
 Including as much of the following as you can helps triage:
 
-- `distrofs` version (`distrofs --version`)
+- `container-mount` version (`container-mount --version`)
 - the transport (unix socket / fd / TCP) and what launched the server
 - steps to reproduce, or a proof of concept
 - the impact — what an attacker gains that they shouldn't have

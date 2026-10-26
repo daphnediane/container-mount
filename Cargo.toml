@@ -1,5 +1,5 @@
 [package]
-name = "distrofs"
+name = "container-mount"
 description = "Guest-side file server and host client for reaching Linux-guest filesystems over a relayed socket (`\\\\wsl$`-style), with a mutual-token handshake and a validating host client"
 version = "0.1.0-dev"
 edition = "2024"
@@ -27,12 +27,12 @@ exclude = [
 ]
 
 [lib]
-name = "distrofs"
+name = "container_mount"
 path = "src/lib.rs"
 
 [[bin]]
-name = "distrofs"
-path = "src/bin/distrofs/main.rs"
+name = "container-mount"
+path = "src/bin/container-mount/main.rs"
 
 # Pure-Rust dependencies only: the guest server is linked with rust-lld
 # against Rust's self-contained musl (.cargo/config.toml), with no cross
@@ -57,12 +57,12 @@ allow-branch = ["main", "release/*"]
 consolidate-commits = false
 pre-release-commit-message = "chore: release {{version}}"
 tag-name = "v{{version}}"
-tag-message = "distrofs {{version}}"
+tag-message = "container-mount {{version}}"
 publish = false
 push = false
 
 # Prebuilt binaries land on each GitHub Release (scripts/build-release.sh,
-# driven by .github/workflows/release.yml) — `cargo binstall distrofs`
+# driven by .github/workflows/release.yml) — `cargo binstall container-mount`
 # fetches the matching tarball instead of compiling.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"

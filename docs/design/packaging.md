@@ -14,18 +14,18 @@ baseline path; crates.io publishing is a 1.0-milestone decision
 
 `scripts/build-pkg.sh` produces, under `scratch/pkg/`:
 
-| Asset                             | Contents                                                                                       | Consumer                            |
-| --------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `distrofs-<ver>.pkg`              | binary, both musl servers, uninstall/update scripts, license docs under `/usr/local`           | manual double-click install         |
-| `distrofs-servers-<ver>.tar.gz`   | `aarch64-unknown-linux-musl/distrofs` + `x86_64-unknown-linux-musl/distrofs` (per-triple dirs) | `distrofs fetch-servers`            |
-| `distrofs-<triple>-v<ver>.tar.gz` | `distrofs` + the per-triple server dirs + LICENSE/notices                                      | `cargo binstall`, `distrofs update` |
-| `distrofs-<ver>-sbom.cdx.json`    | CycloneDX 1.5 dep inventory                                                                    | CVE scanners                        |
+| Asset                                    | Contents                                                                                                     | Consumer                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| `container-mount-<ver>.pkg`              | binary, both musl servers, uninstall/update scripts, license docs under `/usr/local`                         | manual double-click install                |
+| `container-mount-servers-<ver>.tar.gz`   | `aarch64-unknown-linux-musl/container-mount` + `x86_64-unknown-linux-musl/container-mount` (per-triple dirs) | `container-mount fetch-servers`            |
+| `container-mount-<triple>-v<ver>.tar.gz` | `container-mount` + the per-triple server dirs + LICENSE/notices                                             | `cargo binstall`, `container-mount update` |
+| `container-mount-<ver>-sbom.cdx.json`    | CycloneDX 1.5 dep inventory                                                                                  | CVE scanners                               |
 
 Unsigned CI builds keep the same names plus `-unsigned` (pkg and
 client tarball — `update` only takes the unsigned tarball with
 consent, matching container-distro's pkg rule). The server bundle has
 no signed variant: musl binaries are ELF and can't carry a Mac
-signature — their integrity is the embedded `distrofs-version:` stamp
+signature — their integrity is the embedded `container-mount-version:` stamp
 plus the API-reported SHA-256 digest checked at download
 (`src/release.rs`).
 
@@ -43,36 +43,36 @@ Payload — the per-triple layout of
 [install-layout.md](install-layout.md); release builds carry the
 `packaged` and `clap` cargo features:
 
-- `bin/distrofs` — host client/CLI
-- `bin/uninstall-distrofs.sh`, `bin/update-distrofs.sh` — the
-  receipt-driven remover and the `distrofs update` wrapper, shipped so
+- `bin/container-mount` — host client/CLI
+- `bin/uninstall-container-mount.sh`, `bin/update-container-mount.sh` — the
+  receipt-driven remover and the `container-mount update` wrapper, shipped so
   the layout carries its own maintenance tools like Apple's container
   pkg does
-- `libexec/distrofs/<triple>/distrofs` — the guest servers, one dir
+- `libexec/container-mount/<triple>/container-mount` — the guest servers, one dir
   per guest platform (`aarch64-`/`x86_64-unknown-linux-musl` today),
   where `servers::server_dir_for` discovers them
-- `share/doc/distrofs/{LICENSE,THIRD-PARTY-NOTICES.yaml}`
-- `share/man/man1/distrofs*.1` — `clap_mangen` output on clap-feature
+- `share/doc/container-mount/{LICENSE,THIRD-PARTY-NOTICES.yaml}`
+- `share/man/man1/container-mount*.1` — `clap_mangen` output on clap-feature
   builds, staged via `install-man` like container-distro's
 
 Upgrades obsolete stale files the same way: Installer removes
 receipt-owned paths the new payload doesn't carry. Uninstall is
 `pkgutil`-receipt-driven (never a hardcoded list) — see the header of
-`packaging/uninstall-distrofs.sh`. distrofs's one piece of per-user
+`packaging/uninstall-container-mount.sh`. container-mount's one piece of per-user
 state is the fetched-servers dir ([install-layout]), so uninstall
 offers a keep/delete-data prompt for it.
 
 ## Self-update and fetch
 
-`distrofs update` replaces the running binary from the client tarball
+`container-mount update` replaces the running binary from the client tarball
 (digest-verified, codesign + same-team check on macOS); it refuses to
 self-elevate, so a root-owned `/usr/local` pkg install updates via the
-new pkg instead — `update-distrofs.sh` stays a thin wrapper either
-way. `distrofs fetch-servers` installs just the servers — the piece
+new pkg instead — `update-container-mount.sh` stays a thin wrapper either
+way. `container-mount fetch-servers` installs just the servers — the piece
 `cargo install` can't provide and the download path for users who
 only need the guest side (e.g. container-distro installs). It fetches
 the bundle matching its own version and lands servers under
-`<prefix>/libexec/distrofs/<triple>/`, or the per-user servers dir
+`<prefix>/libexec/container-mount/<triple>/`, or the per-user servers dir
 when the prefix isn't writable; on `packaged` builds the bundled
 servers count as already fetched. The full semantics and the
 embedder contract are in [install-layout.md](install-layout.md).

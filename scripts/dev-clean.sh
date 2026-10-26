@@ -1,10 +1,10 @@
 #!/bin/sh
-# Remove every distrofs install from this machine — for dev machines
+# Remove every container-mount install from this machine — for dev machines
 # cycling between pkg / cargo / manual installs, when a new build must
 # be the only copy. Removes:
-#   - the .pkg payload (delegated to packaging/uninstall-distrofs.sh)
-#   - $CARGO_HOME/bin/distrofs via `cargo uninstall`, and
-#     */libexec/distrofs/ server dirs under the cargo root and
+#   - the .pkg payload (delegated to packaging/uninstall-container-mount.sh)
+#   - $CARGO_HOME/bin/container-mount via `cargo uninstall`, and
+#     */libexec/container-mount/ server dirs under the cargo root and
 #     /usr/local (fetch-servers / build-servers.sh --install)
 #
 # Never touches guests or checkouts. `-n` previews instead of doing.
@@ -41,35 +41,35 @@ sudo_if() {
     fi
 }
 
-PKG=io.github.daphnediane.distrofs
+PKG=io.github.daphnediane.container-mount
 CH=${CARGO_HOME:-$HOME/.cargo}
 
 step "pkg payload"
 if pkgutil --pkg-info "$PKG" >/dev/null 2>&1; then
     if [ -n "$DRY" ]; then
-        sh packaging/uninstall-distrofs.sh -n
+        sh packaging/uninstall-container-mount.sh -n
     else
-        sh packaging/uninstall-distrofs.sh
+        sh packaging/uninstall-container-mount.sh
     fi
 else
     echo "  (no receipt for $PKG)"
 fi
 
 step "cargo uninstall"
-if command -v cargo >/dev/null 2>&1 && [ -e "$CH/bin/distrofs" ]; then
-    x cargo uninstall distrofs ||
-        echo "  (cargo uninstall failed — remove $CH/bin/distrofs by hand)"
+if command -v cargo >/dev/null 2>&1 && [ -e "$CH/bin/container-mount" ]; then
+    x cargo uninstall container-mount ||
+        echo "  (cargo uninstall failed — remove $CH/bin/container-mount by hand)"
 else
-    echo "  (no distrofs under $CH/bin)"
+    echo "  (no container-mount under $CH/bin)"
 fi
 
 step "fetched/built servers"
-# <prefix>/libexec/distrofs — install-managed, so not covered by the
+# <prefix>/libexec/container-mount — install-managed, so not covered by the
 # pkg receipt when fetch-servers added files to it, and not by cargo.
 for prefix in "$CH" /usr/local "$HOME/.local"; do
-    d="$prefix/libexec/distrofs"
+    d="$prefix/libexec/container-mount"
     [ -d "$d" ] || continue
-    for f in "$d"/distrofs-server-*; do
+    for f in "$d"/container-mount-server-*; do
         [ -e "$f" ] && sudo_if "$d" rm -f "$f"
     done
     sudo_if "$prefix/libexec" rmdir "$d" 2>/dev/null
@@ -77,7 +77,7 @@ for prefix in "$CH" /usr/local "$HOME/.local"; do
 done
 
 if [ -z "$DRY" ]; then
-    p=$(command -v distrofs 2>/dev/null || true)
+    p=$(command -v container-mount 2>/dev/null || true)
     [ -n "$p" ] && echo "  still on PATH: $p"
 fi
 

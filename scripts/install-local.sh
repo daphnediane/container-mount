@@ -4,7 +4,7 @@
 #
 #   cargo install --path . && scripts/build-servers.sh --install ~/.cargo
 #
-# The servers land in <cargo-root>/libexec/distrofs/, which a binary
+# The servers land in <cargo-root>/libexec/container-mount/, which a binary
 # under <root>/bin discovers automatically (src/servers.rs).
 set -eu
 cd "$(dirname "$0")/.."

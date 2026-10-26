@@ -4,9 +4,9 @@
  * See LICENSE file for full license text
  */
 
-//! `distrofs` — one binary, two ends.
+//! `container-mount` — one binary, two ends.
 //!
-//! As the guest server (`distrofs serve`) it runs inside a Linux
+//! As the guest server (`container-mount serve`) it runs inside a Linux
 //! container/VM on a socket the VM relays to the host. As the host
 //! client (`ls`/`stat`/`get`/`put`/`check`) it connects through that
 //! relay — or any other Unix socket, inherited fd, or TCP port —
@@ -31,26 +31,26 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use distrofs::connect::{self, Target};
-use distrofs::proto;
+use container_mount::connect::{self, Target};
+use container_mount::proto;
 
-/// Scannable version marker — `distrofs servers`/`server-path` read it
+/// Scannable version marker — `container-mount servers`/`server-path` read it
 /// out of a binary without executing it (`servers::STAMP_MARK`).
 /// `#[used]` keeps it in the binary through release+strip builds.
 #[used]
 static VERSION_STAMP: &[u8] = concat!(
-    "distrofs-version:",
+    "container-mount-version:",
     env!("CARGO_PKG_VERSION"),
-    ":protocol:1\0"
+    ":protocol:2\0"
 )
 .as_bytes();
 const _: () = assert!(
-    proto::VERSION == 1,
+    proto::VERSION == 2,
     "bump the stamp's protocol digits with proto::VERSION"
 );
 
 const USAGE: &str = "\
-usage: distrofs [--dev] [--timeout SECS]
+usage: container-mount [--dev] [--timeout SECS]
                 [--socket PATH | --fd N | --tcp HOST:PORT]
                 [--peer-requirement REQ] COMMAND ...
 
@@ -68,12 +68,12 @@ usage: distrofs [--dev] [--timeout SECS]
   update     self-update this install to the latest release
              [--version V] [--dry-run] [--force]
 
-  --socket PATH   unix socket to connect to (or DISTROFS_SOCKET)
+  --socket PATH   unix socket to connect to (or CONTAINER_MOUNT_SOCKET)
   --fd N          inherited, already-connected unix socket fd
   --tcp HOST:PORT connect over TCP (engines that only publish TCP)
   --peer-requirement REQ   require the unix peer to satisfy this
                            code-signing requirement (macOS)
-  --dev        enable dev seams (DISTROFS_RELEASES_URL, in-tree builds)
+  --dev        enable dev seams (CONTAINER_MOUNT_RELEASES_URL, in-tree builds)
   --version  print the version";
 
 /// How long the client waits for a server to come up.
@@ -139,17 +139,17 @@ fn parse_global(args: &[String]) -> Result<(Opts, &[String])> {
     Ok((o, &args[i..]))
 }
 
-/// `distrofs X.Y.Z (protocol N)` — the same text `--version` prints and
+/// `container-mount X.Y.Z (protocol N)` — the same text `--version` prints and
 /// the stamp carries.
 fn version() -> String {
     format!(
-        "distrofs {} (protocol {})",
+        "container-mount {} (protocol {})",
         env!("CARGO_PKG_VERSION"),
         proto::VERSION
     )
 }
 
-/// The session token from `DISTROFS_TOKEN`.
+/// The session token from `CONTAINER_MOUNT_TOKEN`.
 fn token() -> Result<[u8; 32]> {
     let hex =
         std::env::var(proto::TOKEN_ENV).with_context(|| format!("missing {}", proto::TOKEN_ENV))?;
@@ -159,7 +159,7 @@ fn token() -> Result<[u8; 32]> {
     Ok(bytes.try_into().unwrap())
 }
 
-/// The connect target: an explicit flag, else `DISTROFS_SOCKET`.
+/// The connect target: an explicit flag, else `CONTAINER_MOUNT_SOCKET`.
 fn target(o: &Opts) -> Result<Target> {
     if let Some(t) = &o.target {
         return Ok(t.clone());
@@ -180,7 +180,7 @@ fn describe(t: &Target) -> String {
 }
 
 /// Connect + handshake per the global options.
-fn connect_client(o: &Opts) -> Result<(distrofs::client::Client, String)> {
+fn connect_client(o: &Opts) -> Result<(container_mount::client::Client, String)> {
     let t = target(o)?;
     let tok = token()?;
     let c = connect::open(&t, &tok, o.peer_requirement.as_deref(), o.timeout)?;
@@ -216,8 +216,8 @@ fn real_main() -> Result<()> {
 
 fn servers(args: &[String], dev: bool) -> Result<()> {
     let verbose = args.iter().any(|a| a == "-v" || a == "--verbose");
-    let found = distrofs::servers::servers(dev);
-    for arch in distrofs::servers::Arch::ALL {
+    let found = container_mount::servers::servers(dev);
+    for arch in container_mount::servers::Arch::ALL {
         match found.iter().find(|s| s.arch == arch) {
             Some(s) => println!(
                 "{:<7} {}  {}",
@@ -234,7 +234,7 @@ fn servers(args: &[String], dev: bool) -> Result<()> {
     }
     if verbose {
         eprintln!("search paths:");
-        for p in distrofs::servers::search_paths(dev) {
+        for p in container_mount::servers::search_paths(dev) {
             eprintln!("  {}", p.display());
         }
     }
@@ -248,7 +248,7 @@ fn server_path(args: &[String], dev: bool) -> Result<()> {
         match a.as_str() {
             "--arch" | "-a" => {
                 let v = it.next().context("--arch needs a value")?;
-                arch = distrofs::servers::Arch::parse(v);
+                arch = container_mount::servers::Arch::parse(v);
                 if arch.is_none() {
                     bail!("unknown architecture `{v}` (arm64 or amd64)");
                 }
@@ -257,7 +257,10 @@ fn server_path(args: &[String], dev: bool) -> Result<()> {
         }
     }
     let arch = arch.context("server-path needs --arch arm64|amd64")?;
-    println!("{}", distrofs::servers::server_path(arch, dev)?.display());
+    println!(
+        "{}",
+        container_mount::servers::server_path(arch, dev)?.display()
+    );
     Ok(())
 }
 
@@ -265,7 +268,7 @@ fn main() -> ExitCode {
     match real_main() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("distrofs: {e:#}");
+            eprintln!("container-mount: {e:#}");
             ExitCode::FAILURE
         }
     }

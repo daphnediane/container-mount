@@ -1,6 +1,6 @@
 # Contributing
 
-container-mount (the `distrofs` binary and, in design, the
+container-mount (the host/guest file bridge and, in design, the
 `container mount` plugin) is a personal project with a single
 maintainer. Issues and pull requests are welcome.
 
@@ -12,8 +12,8 @@ assume good faith, don't be a jerk.
 
 ## Ways to help
 
-- **Bug reports** — open an [issue] with the `distrofs` version
-  (`distrofs --version`), the transport involved (unix socket / fd /
+- **Bug reports** — open an [issue] with the `container-mount` version
+  (`container-mount --version`), the transport involved (unix socket / fd /
   TCP) and which engine relayed it, plus the command you ran and what
   happened vs. what you expected.
 - **Feature ideas** — check the [open issues][issue] first; each

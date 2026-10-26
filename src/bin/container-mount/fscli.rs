@@ -6,7 +6,7 @@
 
 //! The host-side file commands: `ls`, `stat`, `get`, `put`, `check`.
 //! Guest paths are absolute from the guest root; symlink targets are
-//! confined to the volume ([`distrofs::symlink`]).
+//! confined to the volume ([`container_mount::symlink`]).
 
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -16,8 +16,8 @@ use std::os::unix::fs::{FileExt, MetadataExt, PermissionsExt};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use distrofs::client::{Client, Error, Resolved};
-use distrofs::proto::{
+use container_mount::client::{Client, Error, Resolved};
+use container_mount::proto::{
     Attr, CAP_SEEK, Errno, FileKind, MAX_IO, NodeId, OpenFlags, ROOT, SeekWhence, SetAttr, VERSION,
 };
 
@@ -38,15 +38,15 @@ pub fn run(cmd: &str, args: &[String], c: &Client, via: &str, peer_verified: boo
         "get" => match args {
             [path] => get(c, path, None),
             [path, dest] => get(c, path, Some(Path::new(dest))),
-            _ => bail!("usage: distrofs get PATH [DEST]"),
+            _ => bail!("usage: container-mount get PATH [DEST]"),
         },
         "put" => match args {
             [src, path] => put(c, Path::new(src), path),
-            _ => bail!("usage: distrofs put SRC PATH"),
+            _ => bail!("usage: container-mount put SRC PATH"),
         },
         "cp" => match args {
             [src, path] => cp(c, src, path),
-            _ => bail!("usage: distrofs cp SRC PATH"),
+            _ => bail!("usage: container-mount cp SRC PATH"),
         },
         "check" => check(c, via, peer_verified),
         _ => bail!("unknown command `{cmd}`"),
@@ -587,7 +587,7 @@ fn cp(c: &Client, src: &str, path: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use distrofs::proto::Time;
+    use container_mount::proto::Time;
 
     fn attr(kind: FileKind, perm: u32) -> Attr {
         Attr {

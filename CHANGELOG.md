@@ -10,16 +10,16 @@ and audited against the commit log.
 
 ### Added
 
-- Initial standalone release of the container-mount project (repo
-  formerly `distrofs`), split out of
+- Initial standalone release of container-mount (developed as
+  `distrofs` and renamed before release), split out of
   [container-distro](https://github.com/daphnediane/container-distro):
-  one `distrofs` crate/binary carrying the wire protocol, the
+  one `container-mount` crate/binary carrying the wire protocol, the
   validating host client (`ls`, `stat`, `get`, `put`, `check`), and
   the static-musl guest server (`serve`).
 - Transports: Unix socket (`--socket`), inherited fd (`--fd`), and TCP
   (`--tcp` host / `--listen tcp:` guest) for engines that only publish
   ports. Managed private host socket paths via `socket-path`.
-- Mutual HMAC-SHA256 session handshake over `DISTROFS_TOKEN`;
+- Mutual HMAC-SHA256 session handshake over `CONTAINER_MOUNT_TOKEN`;
   optional macOS `--peer-requirement` check on the unix peer's code
   signature; socket directory/leaf hygiene; guest symlink confinement.
 - Server discovery (`servers`, `server-path`) by architecture and
@@ -39,7 +39,7 @@ and audited against the commit log.
 - `get`/`put` preserve sparse files end to end: only data extents
   cross the wire and holes stay unallocated on both sides.
 - Release packaging: `scripts/build-pkg.sh` produces the macOS `.pkg`,
-  the binstall client tarball, and the `distrofs-servers` bundle;
+  the binstall client tarball, and the `container-mount-servers` bundle;
   `build-pkg-signed.sh` (Developer ID via gitignored
   `packaging/signing.local.conf`), `build-servers.sh`,
   `install-local.sh`, `dev-clean.sh`; design docs in

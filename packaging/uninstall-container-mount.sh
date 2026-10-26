@@ -1,18 +1,18 @@
 #!/bin/sh
-# Remove the distrofs .pkg — modeled on Apple's uninstall-container.sh:
+# Remove the container-mount .pkg — modeled on Apple's uninstall-container.sh:
 # the file/dir list comes from the pkg receipt (never a hardcoded list,
 # so an upgraded package's layout can't strand files), and commands get
 # sudo only when the path's parent isn't writable by this user.
 #
-#   uninstall-distrofs.sh         remove the package
-#   uninstall-distrofs.sh -n      dry run — show, don't do
+#   uninstall-container-mount.sh         remove the package
+#   uninstall-container-mount.sh -n      dry run — show, don't do
 #
-# distrofs keeps no per-user state (fetched servers live under the
+# container-mount keeps no per-user state (fetched servers live under the
 # install prefix the receipt owns), so unlike container-distro's
 # uninstaller there is no keep/delete-data choice to make.
 set -u
 
-PKG=io.github.daphnediane.distrofs
+PKG=io.github.daphnediane.container-mount
 DRY=
 
 for arg in "$@"; do
@@ -110,5 +110,5 @@ QUIET=1 sudo_if /var/db/receipts pkgutil --forget "$PKG"
 if [ -n "$DRY" ]; then
     echo "Dry run — nothing was removed. Rerun without -n to remove."
 else
-    echo "Removed distrofs."
+    echo "Removed container-mount."
 fi

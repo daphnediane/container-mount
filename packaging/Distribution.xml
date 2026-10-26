@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Distribution script for the distrofs product archive.
+<!-- Distribution script for the container-mount product archive.
      @VERSION@ / @COMPONENT@ are filled in by scripts/build-pkg.sh.
      arm64-only today (the only host build); no macOS floor — unlike
      container-distro nothing here needs `container`. Revisit both
      when the FSKit module lands (it will want macOS >= 26). -->
 <installer-gui-script minSpecVersion="2">
-    <title>distrofs</title>
+    <title>container-mount</title>
     <organization>io.github.daphnediane</organization>
     <domains enable_localSystem="true" enable_anywhere="false" enable_currentUserHome="false"/>
     <options customize="never" hostArchitectures="arm64" rootVolumeOnly="true"/>
@@ -14,12 +14,12 @@
     <conclusion file="conclusion.html" mime-type="text/html"/>
     <choices-outline>
         <line choice="default">
-            <line choice="io.github.daphnediane.distrofs"/>
+            <line choice="io.github.daphnediane.container-mount"/>
         </line>
     </choices-outline>
     <choice id="default"/>
-    <choice id="io.github.daphnediane.distrofs" title="distrofs">
-        <pkg-ref id="io.github.daphnediane.distrofs"/>
+    <choice id="io.github.daphnediane.container-mount" title="container-mount">
+        <pkg-ref id="io.github.daphnediane.container-mount"/>
     </choice>
-    <pkg-ref id="io.github.daphnediane.distrofs" version="@VERSION@" onConclusion="none">@COMPONENT@</pkg-ref>
+    <pkg-ref id="io.github.daphnediane.container-mount" version="@VERSION@" onConclusion="none">@COMPONENT@</pkg-ref>
 </installer-gui-script>

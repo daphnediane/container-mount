@@ -8,12 +8,9 @@ aren't repeated here — only the 1.0-specific deltas are.
 
 ## Before the first release
 
-- [ ] **Settle the names.** The repo is `container-mount`; the crate,
-  binary, wire protocol (handshake magic, `DISTROFS_TOKEN`, version
-  stamps), server binaries, release artifacts, and signing identifier
-  still say `distrofs` ([history](design/history.md#rename-to-container-mount)).
-  Nothing depends on them yet, so renaming is free until something
-  ships — decide before `v0.1.0`.
+- [x] **Settle the names.** Everything — repo, crate, binary, wire
+  protocol, server binaries, artifacts, identifiers — is
+  `container-mount` ([history](design/history.md#rename-to-container-mount)).
 
 ## Before tagging 1.0
 

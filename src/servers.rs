@@ -7,11 +7,11 @@
 //! Locating guest server binaries — installed release copies and
 //! in-tree builds — and reporting their versions without running them.
 //!
-//! A `distrofs` binary carries a scannable stamp
-//! (`distrofs-version:<ver>:protocol:<n>\0`, see `main.rs`'s
+//! A `container-mount` binary carries a scannable stamp
+//! (`container-mount-version:<ver>:protocol:<n>\0`, see `main.rs`'s
 //! `VERSION_STAMP`), so `servers`/`server-path` can report exactly what
 //! would be deployed. Installed copies live in
-//! `<prefix>/libexec/distrofs/distrofs-server-<arch>` (where `<prefix>`
+//! `<prefix>/libexec/container-mount/container-mount-server-<arch>` (where `<prefix>`
 //! is derived from the running binary the way `layout.rs` does for
 //! container-distro); under `--dev`, in-tree musl target dirs are
 //! searched first.
@@ -22,9 +22,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-/// The stamp embedded in every `distrofs` binary; followed by
+/// The stamp embedded in every `container-mount` binary; followed by
 /// `<pkg-version>:protocol:<n>\0`.
-pub const STAMP_MARK: &[u8] = b"distrofs-version:";
+pub const STAMP_MARK: &[u8] = b"container-mount-version:";
 /// Cap on how much of a candidate binary we read looking for a stamp.
 const SCAN_MAX: u64 = 32 << 20;
 
@@ -54,7 +54,7 @@ impl Arch {
         }
     }
 
-    /// The `distrofs-server-<suffix>` file name.
+    /// The `container-mount-server-<suffix>` file name.
     #[must_use]
     pub fn suffix(self) -> &'static str {
         match self {
@@ -88,7 +88,7 @@ pub struct ServerBuild {
 
 /// The running binary, canonicalized.
 fn current_exe() -> PathBuf {
-    let exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("distrofs"));
+    let exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("container-mount"));
     exe.canonicalize().unwrap_or(exe)
 }
 
@@ -110,18 +110,18 @@ pub fn prefix_of_pub(exe: &Path) -> Option<PathBuf> {
 }
 
 /// The directory installed servers live in for `exe`:
-/// `<prefix>/libexec/distrofs`, or `exe`'s own directory when it sits
+/// `<prefix>/libexec/container-mount`, or `exe`'s own directory when it sits
 /// in such a directory itself.
 #[must_use]
 pub fn server_dir_for(exe: &Path) -> Option<PathBuf> {
     let dir = exe.parent()?;
-    if dir.file_name() == Some(OsStr::new("distrofs")) {
+    if dir.file_name() == Some(OsStr::new("container-mount")) {
         return Some(dir.to_path_buf());
     }
-    prefix_of(exe).map(|p| p.join("libexec").join("distrofs"))
+    prefix_of(exe).map(|p| p.join("libexec").join("container-mount"))
 }
 
-/// `distrofs-server-<arch>` in each installed location, plus — under
+/// `container-mount-server-<arch>` in each installed location, plus — under
 /// `--dev` — the in-tree musl target dirs first.
 fn candidates(arch: Arch, dev: bool) -> Vec<PathBuf> {
     let mut out = Vec::new();
@@ -131,12 +131,12 @@ fn candidates(arch: Arch, dev: bool) -> Vec<PathBuf> {
                 root.join("target")
                     .join(arch.target())
                     .join(profile)
-                    .join("distrofs"),
+                    .join("container-mount"),
             );
         }
     }
     if let Some(dir) = server_dir_for(&current_exe()) {
-        out.push(dir.join(format!("distrofs-server-{}", arch.suffix())));
+        out.push(dir.join(format!("container-mount-server-{}", arch.suffix())));
     }
     out
 }
@@ -200,7 +200,7 @@ pub fn server_path(arch: Arch, dev: bool) -> Result<PathBuf> {
         }
     }
     bail!(
-        "no distrofs server for {} — run `distrofs fetch-servers` to download one, or \
+        "no container-mount server for {} — run `container-mount fetch-servers` to download one, or \
          build {} (tried: {})",
         arch.label(),
         arch.target(),
@@ -218,13 +218,13 @@ pub fn search_paths(dev: bool) -> Vec<PathBuf> {
     Arch::ALL.iter().flat_map(|&a| candidates(a, dev)).collect()
 }
 
-/// Validate `path` names a distrofs build: it must carry the stamp or
+/// Validate `path` names a container-mount build: it must carry the stamp or
 /// be explicitly trusted by the caller.
 pub fn stamped(path: &Path) -> Result<(String, Option<u16>)> {
     let bytes = std::fs::read(path).with_context(|| format!("cannot read {}", path.display()))?;
     scan_stamp(&bytes).with_context(|| {
         format!(
-            "{} carries no distrofs version stamp — is it a distrofs build?",
+            "{} carries no container-mount version stamp — is it a container-mount build?",
             path.display()
         )
     })
@@ -245,11 +245,11 @@ mod tests {
 
     #[test]
     fn test_scan_stamp() {
-        let blob = b"\x7fELF stuff distrofs-version:0.1.0-dev:protocol:1\0more";
+        let blob = b"\x7fELF stuff container-mount-version:0.1.0-dev:protocol:1\0more";
         assert_eq!(scan_stamp(blob), Some(("0.1.0-dev".to_string(), Some(1))));
         assert_eq!(scan_stamp(b"nothing here"), None);
         // A corrupt suffix still yields the version half.
-        let bad = b"distrofs-version:1.2.3:junk";
+        let bad = b"container-mount-version:1.2.3:junk";
         assert_eq!(scan_stamp(bad), None);
     }
 }

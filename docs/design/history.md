@@ -71,22 +71,35 @@ token, and mapped arguments, and propagates its exit code.
 
 ## Rename to container-mount
 
-In October 2026 the repo (and its GitHub remote) was renamed from
+In October 2026, before any release, the project was renamed from
 `distrofs` to `container-mount`, to match the new direction in
 [mount-backends.md](mount-backends.md): a `container mount` plugin
 that owns host file access for any container, with container-distro
 loosely coupled to it through the plugin's CLI instead of driving the
-`distrofs` binary itself.
+binary itself. Everything above this section uses the old names as
+they were at the time.
 
-- **Renamed:** the repo, worktree (`mount/`), bare repo, and GitHub
+- **Repo:** the repo, worktree (`mount/`), bare repo, and GitHub
   URLs. Issue numbers carried over with the repo.
-- **Not renamed (yet):** the crate, binary, wire protocol (handshake
-  magic, `DISTROFS_TOKEN`, version stamps), server binaries
-  (`distrofs-server-*`), release artifacts, and signing identifier
-  still say `distrofs`. Nothing depends on those names — no release
-  has shipped, the protocol is lock-step before 1.0, and
-  container-distro's `main` carries no distrofs integration — so
-  renaming them is a free choice to make before the first release.
-- container-distro's `feature/distrofs` integration predates the new
-  direction; it is reference material, not a consumer. container-distro
-  will integrate afresh against the plugin.
+- **Crate and binary:** `container-mount` (library
+  `container_mount`), sources under `src/bin/container-mount/`.
+- **Wire protocol:** handshake magic `b"container-mount"` (was the
+  8-byte `b"distrofs"`), HMAC labels `container-mount/c` and
+  `container-mount/s`, and `proto::VERSION` 1 → 2, so a server built
+  before the rename is rejected by its stamp instead of failing the
+  handshake.
+- **Runtime names:** `CONTAINER_MOUNT_TOKEN`/`_SOCKET`/
+  `_RELEASES_URL`, the `container-mount-version:` stamp,
+  `container-mount-server-<arch>`, `libexec/container-mount/`,
+  `<temp>/container-mount/s/`, and the guest default
+  `/var/lib/container-mount/container-mount.sock`.
+- **Distribution:** pkg and signing identifier
+  `io.github.daphnediane.container-mount`, artifact names
+  (`container-mount-<ver>.pkg`, `container-mount-servers-<ver>.tar.gz`,
+  …), and `uninstall-container-mount.sh`/`update-container-mount.sh`.
+
+Nothing depended on the old names — no release had shipped, the
+protocol is lock-step before 1.0, and container-distro's `main` had
+no distrofs integration. container-distro's `feature/distrofs`
+branch still uses them; it is reference material, not a consumer —
+container-distro will integrate afresh against the plugin.

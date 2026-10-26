@@ -29,8 +29,8 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use distrofs::connect::Stream;
-use distrofs::proto::*;
+use container_mount::connect::Stream;
+use container_mount::proto::*;
 
 use crate::mounts;
 use crate::serve::{Listen, ServeArgs};
@@ -1308,7 +1308,7 @@ pub fn serve(args: &ServeArgs) -> io::Result<()> {
         active.fetch_add(1, Ordering::SeqCst);
         thread::spawn(move || {
             if let Err(e) = session(stream, &token, shared) {
-                eprintln!("distrofs: session ended: {e}");
+                eprintln!("container-mount: session ended: {e}");
             }
             if let Ok(mut l) = last.lock() {
                 *l = Instant::now();

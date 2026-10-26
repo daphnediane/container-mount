@@ -1,4 +1,4 @@
-# The guest server (the `distrofs` binary's `serve` mode) is a static
+# The guest server (the `container-mount` binary's `serve` mode) is a static
 # musl build linked by rust-lld against Rust's self-contained musl — no
 # cross C toolchain needed. aarch64 serves ARM VMs; x86_64 serves
 # amd64-kernel VMs. See DEV.md "Building the server".
