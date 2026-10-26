@@ -1,9 +1,9 @@
 #!/bin/sh
 # Update container-mount to the latest release (or VERSION) — a thin wrapper:
-# the installed binary does the release lookup, verification
-# (API-reported SHA-256, codesign + same-team check on the new binary),
-# and the swap itself. Shipped in the pkg's bin/ so the package layout
-# carries an updater.
+# the installed binary does the release lookup and verification. On this
+# pkg install that means the signed .pkg (API-reported SHA-256,
+# pkgutil signature + same-team check), handed to Installer.app.
+# Shipped in the pkg's bin/ so the package layout carries an updater.
 #
 #   update-container-mount.sh [VERSION] [--force]
 #

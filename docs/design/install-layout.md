@@ -118,12 +118,12 @@ detection: the release build *knows* it ships a bundle; sniffing a
 root-owned libexec can't tell "admin-installed cargo prefix" from
 "pkg-managed receipt" reliably.
 
-| operation                           | unpackaged          | packaged                                                                                                                                   |
-| ----------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `fetch-servers`, bundled triple     | install to libexec  | report already installed — the bundled copy **is** the fetch result (same release, same bytes)                                             |
-| `fetch-servers`, non-bundled triple | install to libexec  | install to the per-user servers dir                                                                                                        |
-| `server-path --fetch`               | fetch → libexec     | bundled → print bundled path, no download; missing → fetch → per-user dir                                                                  |
-| `update`                            | client-tarball swap | prefer the signed pkg when a pkg receipt exists (the existing [work item](../work/packaging/1.0/update-prefers-pkg.md)), tarball elsewhere |
+| operation                           | unpackaged          | packaged                                                                                        |
+| ----------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| `fetch-servers`, bundled triple     | install to libexec  | report already installed -- the bundled copy **is** the fetch result (same release, same bytes) |
+| `fetch-servers`, non-bundled triple | install to libexec  | install to the per-user servers dir                                                             |
+| `server-path --fetch`               | fetch -> libexec    | bundled -> print bundled path, no download; missing -> fetch -> per-user dir                    |
+| `update`                            | client-tarball swap | signed pkg via Installer.app when a pkg receipt owns the binary (#2), tarball elsewhere         |
 
 The fallback when libexec isn't writable applies everywhere, not
 just under `packaged`: fetch → per-user dir, warn that the prefix

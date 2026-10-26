@@ -22,8 +22,6 @@ in [milestone-1.0.md](../milestone-1.0.md).
 
 - [packaging/1.0/crates-io-publishing.md](packaging/1.0/crates-io-publishing.md)
   — decide crates.io publishing ([#1])
-- [packaging/1.0/update-prefers-pkg.md](packaging/1.0/update-prefers-pkg.md)
-  — `update` prefers the signed pkg on pkg installs ([#2])
 - [packaging/1.0/packaged-feature.md](packaging/1.0/packaged-feature.md)
   — `packaged` cargo feature + per-user servers dir ([#4])
 - [cli/1.0/clap-man-pages.md](cli/1.0/clap-man-pages.md) — `clap`
@@ -51,7 +49,6 @@ in [milestone-1.0.md](../milestone-1.0.md).
   [fake-releases](infra/future/fake-releases.md) ([#18])
 
 [#1]: https://github.com/daphnediane/container-mount/issues/1
-[#2]: https://github.com/daphnediane/container-mount/issues/2
 [#4]: https://github.com/daphnediane/container-mount/issues/4
 [#5]: https://github.com/daphnediane/container-mount/issues/5
 [#6]: https://github.com/daphnediane/container-mount/issues/6

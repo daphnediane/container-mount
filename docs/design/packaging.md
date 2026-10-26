@@ -71,10 +71,14 @@ offers a keep/delete-data prompt for it.
 ## Self-update and fetch
 
 `container-mount update` replaces the running binary from the client tarball
-(digest-verified, codesign + same-team check on macOS); it refuses to
-self-elevate, so a root-owned `/usr/local` pkg install updates via the
-new pkg instead — `update-container-mount.sh` stays a thin wrapper either
-way. `container-mount fetch-servers` installs just the servers — the piece
+(digest-verified, codesign + same-team check on macOS) — except on a
+pkg install, where the receipt's root holds the running binary: there
+it downloads the signed `.pkg` (digest, `pkgutil --check-signature`,
+installer team vs the installed binary's) and `exec`s into
+Installer.app, which asks for admin rights itself. It never
+self-elevates either way; `update-container-mount.sh` stays a thin
+wrapper. A cargo copy elsewhere keeps the tarball path even when a pkg
+is also installed. `container-mount fetch-servers` installs just the servers — the piece
 `cargo install` can't provide and the download path for users who
 only need the guest side (e.g. container-distro installs). It fetches
 the bundle matching its own version and lands servers under

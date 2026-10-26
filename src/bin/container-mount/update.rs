@@ -13,7 +13,10 @@
 //! satisfies `anchor apple generic` under a Developer ID whose team
 //! matches the installed copy's, then swap it into place (plus any
 //! server binaries it carries). It never self-elevates and refuses to
-//! run as root.
+//! run as root. A pkg install — a receipt whose root holds this very
+//! binary — updates through the signed `.pkg` instead (see [`pkg`]):
+//! the receipt owns those root-owned files, and a tarball swap could
+//! neither write them nor update the receipt.
 //!
 //! `fetch-servers` is the package-installer path: download just the
 //! `container-mount-servers-<ver>.tar.gz` asset into the libexec dir so a
@@ -85,15 +88,16 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
         bail!("run without sudo — container-mount never self-elevates");
     }
     let exe = current_exe()?;
-    // A copy managed by another package (container-distro's plugin
-    // libexec dir) must not be swapped out from under it.
+    // A plugin copy (ours under container-plugins/mount, or one an
+    // embedder ships) is refreshed by its installer, not swapped here.
     if exe
         .components()
         .any(|c| c.as_os_str() == "container-plugins")
     {
         bail!(
-            "{} lives in the container plugins directory — that copy belongs to \
-             `container distro` and is replaced by it, not by container-mount update",
+            "{} lives in the container plugins directory — update the main \
+             `container-mount`, then refresh this copy with \
+             `container-mount install-all` (or its embedder's installer)",
             exe.display()
         );
     }
@@ -126,6 +130,10 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
             force,
         )?,
         Ordering::Less => eprintln!("updating container-mount {current} -> {tag}"),
+    }
+    #[cfg(target_os = "macos")]
+    if pkg::owns(&exe) {
+        return pkg::update(&release, &tag, &exe, force, dry_run);
     }
 
     let asset = pick_client_asset(&release, &tag, force)?;
@@ -251,6 +259,207 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
         bail!("{name} contained no <triple>/container-mount servers");
     }
     Ok(())
+}
+
+/// Pkg installs update through the signed `.pkg` and Installer.app,
+/// like container-distro's update: download (digest-verified), check
+/// the Developer ID Installer signature and its team against the
+/// installed binary, then `exec` into `open -a Installer.app` — our
+/// process is replaced, so nothing of ours runs while the privileged
+/// install proceeds, and Installer.app collects the admin password.
+#[cfg(target_os = "macos")]
+mod pkg {
+    use std::os::unix::process::CommandExt;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use anyhow::{Context, Result, bail};
+    use container_mount::release::{Asset, consent, download, find_asset};
+    use serde_json::Value;
+
+    /// Our pkg identifier — what `pkgutil` answers for.
+    const PKG_ID: &str = "io.github.daphnediane.container-mount";
+    /// Explicit `-a` target, so a remapped `.pkg` binding can't send the
+    /// installer elsewhere.
+    const INSTALLER_APP: &str = "/System/Library/CoreServices/Installer.app";
+
+    /// The receipt's install root (`location:` joined under `/`; a
+    /// `/` location means /usr/local, as in the uninstaller), or `None`
+    /// without a receipt.
+    fn receipt_root() -> Option<PathBuf> {
+        let out = Command::new("/usr/sbin/pkgutil")
+            .args(["--pkg-info", PKG_ID])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        parse_root(&String::from_utf8_lossy(&out.stdout))
+    }
+
+    fn parse_root(info: &str) -> Option<PathBuf> {
+        let loc = info
+            .lines()
+            .find_map(|l| l.strip_prefix("location:").map(str::trim))?;
+        let root = PathBuf::from(format!("/{}", loc.trim_matches('/')));
+        Some(if root == Path::new("/") {
+            PathBuf::from("/usr/local")
+        } else {
+            root
+        })
+    }
+
+    /// Whether `exe` is the pkg's own `bin/container-mount` — a cargo
+    /// copy elsewhere keeps the tarball path even with a pkg installed.
+    pub fn owns(exe: &Path) -> bool {
+        receipt_root()
+            .and_then(|r| std::fs::canonicalize(r.join("bin/container-mount")).ok())
+            .is_some_and(|p| p == exe)
+    }
+
+    /// The signed pkg when the release has one; the unsigned CI build
+    /// only with an explicit yes.
+    fn pick(release: &Value, tag: &str, force: bool) -> Result<(Asset, bool)> {
+        if let Some(a) = find_asset(release, &format!("container-mount-{tag}.pkg")) {
+            return Ok((a, true));
+        }
+        let unsigned = format!("container-mount-{tag}-unsigned.pkg");
+        match find_asset(release, &unsigned) {
+            Some(a) => {
+                consent(
+                    &format!("release {tag} has no signed package — only the unsigned CI build"),
+                    "Install the unsigned package? [y/N] ",
+                    force,
+                )?;
+                Ok((a, false))
+            }
+            None => bail!("release {tag} has no container-mount .pkg asset"),
+        }
+    }
+
+    /// `pkgutil --check-signature`: must be signed; returns the
+    /// Developer ID Installer team when the output names one.
+    fn check_signature(pkg: &Path) -> Result<Option<String>> {
+        let out = Command::new("/usr/sbin/pkgutil")
+            .arg("--check-signature")
+            .arg(pkg)
+            .output()
+            .context("failed to run `pkgutil --check-signature`")?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        if !out.status.success() || !text.contains("Status: signed") {
+            bail!("{} failed its signature check:\n{text}", pkg.display());
+        }
+        Ok(installer_team(&text))
+    }
+
+    fn installer_team(text: &str) -> Option<String> {
+        let line = text
+            .lines()
+            .find(|l| l.contains("Developer ID Installer:"))?;
+        eprintln!("  signed by {}", line.trim());
+        line.rsplit('(')
+            .next()
+            .and_then(|s| s.trim().strip_suffix(')'))
+            .map(str::to_string)
+    }
+
+    pub fn update(
+        release: &Value,
+        tag: &str,
+        exe: &Path,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
+        let (asset, signed) = pick(release, tag, force)?;
+        let pkg = download(&asset, &super::download_dir()?)?;
+        let team = if signed { check_signature(&pkg)? } else { None };
+        if let (Some(have), Some(got)) = (super::team_id(exe), team.as_deref())
+            && have != got
+        {
+            consent(
+                &format!("the {tag} package is signed by team {got}, the installed copy by {have}"),
+                "Install it anyway? [y/N] ",
+                force,
+            )?;
+        }
+        if dry_run {
+            println!(
+                "dry run — would install {tag} from {} (pkg install)",
+                pkg.display()
+            );
+            return Ok(());
+        }
+        eprintln!(
+            "installing container-mount {tag} — {} opens in Installer.app; then run \
+             `container-mount install-all` if you registered the plugin yourself",
+            pkg.display()
+        );
+        let err = Command::new("/usr/bin/open")
+            .arg("-a")
+            .arg(INSTALLER_APP)
+            .arg(&pkg)
+            .exec();
+        Err(err).with_context(|| {
+            format!(
+                "could not launch Installer.app; install the verified package manually:\n  \
+                 sudo installer -pkg {} -target /",
+                pkg.display()
+            )
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn release(names: &[&str]) -> Value {
+            serde_json::json!({
+                "tag_name": "v0.1.0",
+                "assets": names.iter().map(|n| serde_json::json!({
+                    "name": n,
+                    "browser_download_url": format!("https://example/{n}"),
+                    "digest": "sha256:aa",
+                })).collect::<Vec<_>>(),
+            })
+        }
+
+        #[test]
+        fn test_pick_prefers_signed_pkg() {
+            let r = release(&[
+                "container-mount-0.1.0-unsigned.pkg",
+                "container-mount-0.1.0.pkg",
+                "container-mount-aarch64-apple-darwin-v0.1.0.tar.gz",
+            ]);
+            let (a, signed) = pick(&r, "0.1.0", false).unwrap();
+            assert!(signed && a.name == "container-mount-0.1.0.pkg");
+        }
+
+        #[test]
+        fn test_unsigned_pkg_needs_force_off_tty() {
+            let r = release(&["container-mount-0.1.0-unsigned.pkg"]);
+            assert!(!pick(&r, "0.1.0", true).unwrap().1);
+            assert!(pick(&r, "0.1.0", false).is_err());
+            assert!(pick(&release(&["x.tar.gz"]), "0.1.0", true).is_err());
+        }
+
+        #[test]
+        fn test_parse_receipt_root() {
+            let info = "package-id: io.github.daphnediane.container-mount\nlocation: usr/local\n";
+            assert_eq!(parse_root(info), Some(PathBuf::from("/usr/local")));
+            assert_eq!(
+                parse_root("location: /\n"),
+                Some(PathBuf::from("/usr/local"))
+            );
+            assert_eq!(parse_root("version: 1\n"), None);
+        }
+
+        #[test]
+        fn test_installer_team_from_pkgutil_output() {
+            let text = "Status: signed by a developer certificate issued by Apple for distribution\n\
+                 Certificate Chain:\n 1. Developer ID Installer: Daphne Pfister (YN9EG6U9PY)\n";
+            assert_eq!(installer_team(text).as_deref(), Some("YN9EG6U9PY"));
+        }
+    }
 }
 
 /// Where downloads are cached: the per-user Darwin cache on macOS,

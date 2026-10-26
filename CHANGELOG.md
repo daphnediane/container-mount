@@ -47,6 +47,9 @@ and audited against the commit log.
   `container` releases outside the verified range
   (`docs/design/container-internals.md`). `tests/plugin-e2e.sh` covers
   alpine, amd64, `FROM scratch`, and machine targets.
+- `update` on a pkg install ([#2]) downloads the signed `.pkg`,
+  checks its signature and installer team, and hands it to
+  Installer.app; other installs keep the tarball swap.
 - `install-all` / `uninstall-all` (and `install-plugin` /
   `uninstall-plugin`): fetch this release's servers when missing and
   register the `container mount` plugin as a self-contained copy
@@ -77,4 +80,5 @@ and audited against the commit log.
   verifies and swaps them in over the CI draft. Design docs in
   `docs/design/{protocol,security,filesystems,packaging,release,install-layout,server-portability,container-internals}.md`.
 
+[#2]: https://github.com/daphnediane/container-mount/issues/2
 [#3]: https://github.com/daphnediane/container-mount/issues/3

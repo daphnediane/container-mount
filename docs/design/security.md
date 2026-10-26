@@ -133,6 +133,12 @@ it:
   change what lands; `container` is resolved as the invoking user
   first. Uninstall deletes only the files install writes, under a
   `config.toml` carrying our marker.
+- On a pkg install `update` takes the signed `.pkg` instead: digest,
+  `pkgutil --check-signature`, and the installer team against the
+  installed binary's (consent on mismatch, and for an unsigned CI
+  pkg), then `exec`s `open -a /System/Library/CoreServices/Installer.app`
+  — our process is replaced, so nothing of ours runs during the
+  privileged install, and Installer.app collects the password.
 - `update` never self-elevates, refuses to run as root, and refuses
   to replace the copy installed under a container-plugins dir — that
   copy belongs to the embedding package.
