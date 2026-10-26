@@ -58,6 +58,10 @@ fn run(dev: bool, args: &[&std::ffi::OsStr]) -> Result<Vec<u8>> {
 pub struct Info {
     pub id: String,
     pub state: String,
+    /// Who relative paths and new files belong to by default: a
+    /// machine's provisioned account (`uid:gid`), else the container's
+    /// init-process user (`NAME|UID[:GID]`); `None` means root.
+    pub user: Option<String>,
 }
 
 /// `container inspect ID`; failing that, a `container machine` named
@@ -70,21 +74,49 @@ pub fn inspect(dev: bool, id: &str) -> Result<Info> {
             let Ok(out) = run(dev, &["machine".as_ref(), "inspect".as_ref(), id.as_ref()]) else {
                 return Err(e);
             };
-            let backing = machine_container(&out)?;
+            let (backing, user) = parse_machine(&out)?;
             let out = run(dev, &["inspect".as_ref(), backing.as_ref()])?;
-            parse_inspect(&out)
+            Ok(Info {
+                user: user.or(parse_inspect(&out)?.user),
+                ..parse_inspect(&out)?
+            })
         }
     }
 }
 
-/// `containerId` from `container machine inspect` output.
-fn machine_container(json: &[u8]) -> Result<String> {
+/// `containerId` and the provisioned `userSetup` account (as
+/// `uid:gid`) from `container machine inspect` output.
+fn parse_machine(json: &[u8]) -> Result<(String, Option<String>)> {
     let v: serde_json::Value =
         serde_json::from_slice(json).context("unreadable `container machine inspect` output")?;
-    v.pointer("/0/containerId")
+    let id = v
+        .pointer("/0/containerId")
         .and_then(|v| v.as_str())
         .map(str::to_owned)
-        .context("`container machine inspect` has no containerId")
+        .context("`container machine inspect` has no containerId")?;
+    let user = v.pointer("/0/userSetup").and_then(|u| {
+        Some(format!(
+            "{}:{}",
+            u.get("uid")?.as_u64()?,
+            u.get("gid")?.as_u64()?
+        ))
+    });
+    Ok((id, user))
+}
+
+/// The init process's user from `container inspect`: either
+/// `{"raw": {"userString": "…"}}` or `{"id": {"uid": …, "gid": …}}`.
+fn init_user(c: &serde_json::Value) -> Option<String> {
+    let u = c.pointer("/configuration/initProcess/user")?;
+    if let Some(s) = u.pointer("/raw/userString").and_then(|v| v.as_str()) {
+        return (!s.is_empty()).then(|| s.to_owned());
+    }
+    let id = u.get("id")?;
+    Some(format!(
+        "{}:{}",
+        id.get("uid")?.as_u64()?,
+        id.get("gid")?.as_u64()?
+    ))
 }
 
 fn parse_inspect(json: &[u8]) -> Result<Info> {
@@ -95,6 +127,7 @@ fn parse_inspect(json: &[u8]) -> Result<Info> {
     Ok(Info {
         id: field("/configuration/id").context("`container inspect` has no id")?,
         state: field("/status/state").unwrap_or_else(|| "unknown".into()),
+        user: init_user(c),
     })
 }
 
@@ -173,18 +206,39 @@ mod tests {
             parse_inspect(json).unwrap(),
             Info {
                 id: "web".into(),
-                state: "running".into()
+                state: "running".into(),
+                user: None,
             }
         );
+        let json = br#"[{"configuration":{"id":"u","initProcess":{"user":{"raw":{"userString":"1000:1000"}}}},
+                        "status":{"state":"running"}}]"#;
+        assert_eq!(
+            parse_inspect(json).unwrap().user.as_deref(),
+            Some("1000:1000")
+        );
+        let json =
+            br#"[{"configuration":{"id":"u","initProcess":{"user":{"id":{"uid":7,"gid":8}}}},
+                        "status":{"state":"running"}}]"#;
+        assert_eq!(parse_inspect(json).unwrap().user.as_deref(), Some("7:8"));
+        let json =
+            br#"[{"configuration":{"id":"u","initProcess":{"user":{"raw":{"userString":""}}}},
+                        "status":{"state":"running"}}]"#;
+        assert_eq!(parse_inspect(json).unwrap().user, None);
         assert!(parse_inspect(b"[]").is_err());
         assert!(parse_inspect(b"nope").is_err());
     }
 
     #[test]
-    fn test_machine_container_reads_backing_id() {
-        let json = br#"[{"containerId":"dev-c2bb52","id":"dev","homeMount":"rw"}]"#;
-        assert_eq!(machine_container(json).unwrap(), "dev-c2bb52");
-        assert!(machine_container(br#"[{"id":"dev"}]"#).is_err());
+    fn test_parse_machine_reads_backing_id_and_user() {
+        let json = br#"[{"containerId":"dev-c2bb52","id":"dev","homeMount":"rw",
+                        "userSetup":{"username":"me","uid":501,"gid":20,"home":"/Users/me"}}]"#;
+        assert_eq!(
+            parse_machine(json).unwrap(),
+            ("dev-c2bb52".into(), Some("501:20".into()))
+        );
+        let bare = br#"[{"containerId":"dev-c2bb52","id":"dev"}]"#;
+        assert_eq!(parse_machine(bare).unwrap(), ("dev-c2bb52".into(), None));
+        assert!(parse_machine(br#"[{"id":"dev"}]"#).is_err());
     }
 
     #[test]

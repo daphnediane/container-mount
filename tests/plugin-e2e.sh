@@ -14,6 +14,7 @@
 #   tests/plugin-e2e.sh [--machine] [--keep]
 #
 # Apple `container` on macOS only; skips cleanly without it.
+# cspell:ignore nosuchuser lst
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -54,6 +55,7 @@ cleanup() {
     [ "$KEEP" = 1 ] && return
     for n in "${NAMES[@]}"; do container delete -f "$n" >/dev/null 2>&1 || true; done
     [ "$MACHINE" = 1 ] && container machine delete "$TAG-machine" >/dev/null 2>&1 || true
+    container image delete "$TAG-scratch" >/dev/null 2>&1 || true
     rm -rf "$SCRATCH"
 }
 trap cleanup EXIT
@@ -68,18 +70,27 @@ flunk() { log "FAIL $*"; fail=1; }
 # Round trip through one target; `$2` is 1 when the image has a shell.
 exercise() {
     local name="$1" shell="$2"
-    plugin fs "$name" check >/dev/null && pass "$name check" || { flunk "$name check"; return; }
-    plugin fs "$name" ls / >/dev/null && pass "$name ls" || flunk "$name ls"
+    plugin ls "$name:/" >/dev/null && pass "$name ls" || { flunk "$name ls"; return; }
     echo "host-payload-$name" > "$SCRATCH/up-$name.txt"
-    plugin fs "$name" put "$SCRATCH/up-$name.txt" /up.txt && pass "$name put" || flunk "$name put"
-    plugin fs "$name" get /up.txt - | grep -q "host-payload-$name" \
-        && pass "$name get" || flunk "$name get"
+    plugin copy "$SCRATCH/up-$name.txt" "$name:/up.txt" && pass "$name copy in" || flunk "$name copy in"
+    plugin cat "$name:/up.txt" | grep -q "host-payload-$name" \
+        && pass "$name cat" || flunk "$name cat"
+    plugin copy "$name:/up.txt" "$SCRATCH/down-$name.txt" \
+        && cmp -s "$SCRATCH/up-$name.txt" "$SCRATCH/down-$name.txt" \
+        && pass "$name copy out" || flunk "$name copy out"
+    # Relative paths land in the default user's home.
+    plugin copy "$SCRATCH/up-$name.txt" "$name:rel-$name.txt" \
+        && plugin cat "$name:~/rel-$name.txt" | grep -q "host-payload-$name" \
+        && pass "$name home-relative" || flunk "$name home-relative"
+    plugin copy "$name:/up.txt" "$name:/up-copy.txt" \
+        && plugin cat "$name:/up-copy.txt" | grep -q "host-payload-$name" \
+        && pass "$name in-guest copy" || flunk "$name in-guest copy"
     if [ "$shell" = 1 ]; then
         container exec "$name" /bin/sh -c "grep -q host-payload-$name /up.txt" \
-            && pass "$name put visible in guest" || flunk "$name put visible in guest"
+            && pass "$name copy visible in guest" || flunk "$name copy visible in guest"
     fi
     # Each command's server copy deletes itself once running.
-    left="$(plugin fs "$name" ls /root/.container-mount)"
+    left="$(plugin ls "$name:/root/.container-mount")"
     [ -z "$left" ] && pass "$name no leftover server" || flunk "$name leftover: $left"
 }
 
@@ -108,15 +119,59 @@ if [ "$MACHINE" = 1 ]; then
     exercise "$TAG-machine" 0
 fi
 
+# Users: relative paths and new files follow --user, and ~USER works.
+container exec "$TAG-alpine" adduser -D -u 1031 -h /home/tester tester >/dev/null 2>&1
+plugin copy -u tester "$SCRATCH/up-$TAG-alpine.txt" "$TAG-alpine:mine.txt" \
+    && [ "$(container exec "$TAG-alpine" stat -c %u:%g:%n /home/tester/mine.txt)" \
+        = "1031:1031:/home/tester/mine.txt" ] \
+    && pass "--user owns and homes the copy" || flunk "--user copy"
+plugin cat "$TAG-alpine:~tester/mine.txt" | grep -q host-payload \
+    && pass "~USER path" || flunk "~USER path"
+plugin cat "tester@$TAG-alpine:mine.txt" | grep -q host-payload \
+    && pass "USER@TARGET path" || flunk "USER@TARGET path"
+# USER@ writes as that user: their home, their uid and primary group.
+container exec "$TAG-alpine" addgroup -g 2000 extra >/dev/null 2>&1
+container exec "$TAG-alpine" addgroup tester extra >/dev/null 2>&1
+plugin copy "$SCRATCH/up-$TAG-alpine.txt" "root@$TAG-alpine:as-root.txt" \
+    && [ "$(container exec "$TAG-alpine" stat -c %u:%g /root/as-root.txt)" = "0:0" ] \
+    && pass "root@ owns as 0:0 in /root" || flunk "root@ ownership"
+plugin copy "$SCRATCH/up-$TAG-alpine.txt" "tester@$TAG-alpine:as-tester.txt" \
+    && [ "$(container exec "$TAG-alpine" stat -c %u:%g /home/tester/as-tester.txt)" = "1031:1031" ] \
+    && pass "USER@ owns as the user's primary group" || flunk "USER@ ownership"
+# Two users in one guest: staged through the host, owned by the second.
+plugin copy "tester@$TAG-alpine:mine.txt" "$TAG-alpine:/root/from-tester.txt" \
+    && [ "$(container exec "$TAG-alpine" stat -c %u /root/from-tester.txt)" = 0 ] \
+    && pass "user-to-user copy" || flunk "user-to-user copy"
+plugin ls -u nosuchuser "$TAG-alpine:" >/dev/null 2>&1 \
+    && flunk "unknown --user accepted" || pass "unknown --user refused"
+
+# Guest to guest, streamed through the host.
+plugin copy "$TAG-alpine:/up.txt" "$TAG-amd64:/from-alpine.txt" \
+    && plugin cat "$TAG-amd64:/from-alpine.txt" | grep -q "host-payload-$TAG-alpine" \
+    && pass "guest-to-guest copy" || flunk "guest-to-guest copy"
+
+# Dispatch rules.
+err="$(plugin lst "$TAG-alpine:" 2>&1 || true)"
+echo "$err" | grep -q 'did you mean `list` or `ls`' && pass "typo hint" || flunk "typo hint ($err)"
+err="$(plugin rm "$TAG-alpine:/up.txt" 2>&1 || true)"
+echo "$err" | grep -q "not implemented yet" && pass "reserved verb" || flunk "reserved verb ($err)"
+err="$(plugin -- ls 2>&1 || true)"
+echo "$err" | grep -q "FSKit" && pass "-- makes a verb a TARGET" || flunk "-- ($err)"
+err="$(plugin "$TAG-alpine" /tmp/mnt 2>&1 || true)"
+echo "$err" | grep -q "FSKit" && pass "implied attach" || flunk "implied attach ($err)"
+plugin copy a b >/dev/null 2>&1 && flunk "local-to-local accepted" || pass "local-to-local refused"
+[ "$(plugin list --format json)" = "[]" ] && pass "list json" || flunk "list json"
+
 # Stopped targets are refused, not booted.
 container stop "$TAG-alpine" >/dev/null
-if plugin fs "$TAG-alpine" check >/dev/null 2>&1; then
+if plugin ls "$TAG-alpine:/" >/dev/null 2>&1; then
     flunk "stopped container accepted"
 else
     pass "stopped container refused"
 fi
 
-out="$(plugin version --format json)"
-echo "$out" | grep -q '"interface":1' && pass "version json" || flunk "version json ($out)"
+out="$(plugin --version --format json)"
+echo "$out" | grep -q '"interface":2' && pass "version json" || flunk "version json ($out)"
 
 [ "$fail" = 0 ] && log "all checks passed" || die "failures above"
+

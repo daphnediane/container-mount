@@ -60,7 +60,10 @@ this check; there is deliberately no switch to relax it yet.
 ## CLI behavior (L0, undocumented details)
 
 - **`container inspect ID`** prints a JSON array; we read
-  `[0].configuration.id` and `[0].status.state` (`"running"`).
+  `[0].configuration.id`, `[0].status.state` (`"running"`), and the
+  default user from `[0].configuration.initProcess.user` — either
+  `{"raw": {"userString": "1000:1000"}}` (empty means root) or
+  `{"id": {"uid": …, "gid": …}}`.
 - **`container copy DIR ID:DEST`** keeps file modes (`0755` stays
   executable), lands files owned by the host uid, creates missing
   parents root-owned `0755`, and nests `DIR` inside `DEST` when
@@ -77,8 +80,11 @@ this check; there is deliberately no switch to relax it yet.
   fresh `CONTAINER_MOUNT_TOKEN_<nonce>` name (`serve --token-env`).
 - **`container machine inspect NAME`** prints a JSON array whose
   `[0].containerId` names the machine's backing container — an
-  ordinary container the dial route reaches. Plain `container ls`
-  hides it.
+  ordinary container the dial route reaches (plain `container ls`
+  hides it) — and whose `[0].userSetup` (`uid`, `gid`, `username`,
+  `home`) is the provisioned account, our default user. The home
+  itself comes from the guest's passwd, which machine setup writes
+  from `--home`.
 - **`container system status --format json`** exposes
   `server.version`, which the version gate reads.
 - **Guest kernel arch is the host's.** On Apple silicon, amd64 images
@@ -111,9 +117,10 @@ handshake error), not open. `version` and `help` never check.
    and team above.
 3. `ContainerClient.dial` and the `XPCKeys`/`XPCMessage` names in the
    upstream source still match the table above.
-4. `tests/plugin-e2e.sh` passes: `fs check`/`ls`/`get`/`put` against
-   an alpine container, an amd64 one, and a `FROM scratch` one whose
-   environment defines `CONTAINER_MOUNT_TOKEN`.
+4. `tests/plugin-e2e.sh --machine` passes: `ls`/`cat`/`copy` against
+   an alpine container, an amd64 one, a `FROM scratch` one whose
+   environment defines `CONTAINER_MOUNT_TOKEN`, and a machine — with
+   home-relative paths, `USER@` ownership, and guest-to-guest copies.
 5. `container copy` semantics above still hold (modes kept, parents
    created, nesting into an existing directory).
 6. The exec environment merge: if upstream de-duplicates, the

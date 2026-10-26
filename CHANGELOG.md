@@ -36,13 +36,19 @@ and audited against the commit log.
   punch hole, zero/collapse/insert ranges), `FsyncDir`/`SyncFs`, and
   xattr get/set/list/remove.
 - `cp` command — guest-side file copies without a wire round trip.
-- `container mount` plugin, first slice: `fs TARGET ls|stat|get|put|cp|check`
-  on any running container or `container machine` (by name) with no
-  create-time flags — the server is copied in with `container copy`,
-  started as root on a random vsock port below 1024 with a fresh
-  per-command token, and reached through the apiserver's dial route
-  over a code-signature-pinned XPC connection. `version --format json`
-  reports the plugin interface number. Runs as `container-mount plugin
+- `container mount` plugin, first slice: `ls`, `stat`, `cat`, and
+  `copy` (`cp`) on any running container or `container machine` (by
+  name) with no create-time flags, addressed as `[USER@]TARGET:PATH`
+  — relative paths and `~`/`~USER` resolve against the guest user's
+  home, new files belong to that user and their primary group (not a
+  permission check: the server is guest root), and `copy` also goes
+  within a guest (server-side) or guest to guest. `--user`, `--` to end
+  verb recognition, "did you mean" for near-miss verbs, an implied
+  `attach` and a set of reserved verbs for later, and `list` / `--version
+  [--format json]` (plugin interface 2). The server is copied in with
+  `container copy`, started as root on a random vsock port below 1024
+  with a fresh per-command token, and reached through the apiserver's
+  dial route over a code-signature-pinned XPC connection. Runs as `container-mount plugin
   ...` until installed as `container-plugins/mount/bin/mount`; warns on
   `container` releases outside the verified range
   (`docs/design/container-internals.md`). `tests/plugin-e2e.sh` covers

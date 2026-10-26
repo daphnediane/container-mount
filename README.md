@@ -10,10 +10,12 @@ The project has two layers:
   the validating host client, all in one `container-mount` binary
   (below). It was called `distrofs` before the first release.
 - **`container mount`** (first slice) — a `podman mount`-style
-  plugin for Apple's `container`. Today `container mount fs TARGET
-  ls|stat|get|put|cp|check` reaches any *running* container or
-  machine with no create-time flags (vsock dial through the
-  apiserver); stopped disks, images, and real mount points are still
+  plugin for Apple's `container`. Today `ls`, `stat`, `cat`, and
+  `copy` reach any *running* container or machine with no create-time
+  flags (vsock dial through the apiserver), addressed scp-style —
+  `container mount copy notes.txt alice@web:` lands in alice's home,
+  owned by her; `copy web:/etc/hosts db:/tmp/` goes guest to guest.
+  Stopped disks, images, and real mount points (`attach`) are still
   in design. container-distro will call it through its CLI alone. See
   [docs/design/mount-backends.md](docs/design/mount-backends.md) and,
   for the upstream internals it depends on,

@@ -297,33 +297,81 @@ Distros get it through `prepare` when container-distro uses it.
   versioned by an *interface* number separate from the wire protocol
   version. That is the only thing the two projects share.
 
-### Surface (sketch)
+### Surface
 
 Upstream plugins dispatch on the top-level verb (`container distro`,
 `container machine`), so a plugin can't add `container image mount`;
 images take `--image`. `container umount` would be a second plugin
-name for the same binary.
+name for the same binary, mapping to `detach`.
+
+There is no OCI standard to follow. The shape borrows `podman mount`
+(bare `mount` lists, `umount` undoes), `hdiutil attach`/`detach`
+(storage appearing on the host), `git stash`'s implied subcommand, and
+`scp`/`rclone`/`container copy` addressing:
 
 ```text
-container mount [--snapshot | --exclusive] TARGET [DIR]   # container id
-container mount --image REF [DIR]
-container mount --disk PATH [--exclusive] [DIR]           # ext4 the caller owns
-container mount fs TARGET ls|stat|get|put|check ...       # file ops, no FSKit
-container mount list --format json                        # mounts, disks held
-container mount prepare --id ID --format json             # create-time references
-container mount version --format json                     # interface number
-container umount TARGET|DIR
+container mount [OPTIONS] [--] TARGET [DIR]          # implied attach
+container mount attach [--snapshot | --exclusive] [--read-only] [--] TARGET [DIR]
+container mount attach --image REF [DIR] | --disk PATH [--exclusive] [DIR]
+container mount detach [-a | --all] [--] TARGET|DIR
+container mount                                       # = list
+container mount list [--format json]                  # attached mounts
+container mount ls [-l] [USER@]TARGET[:PATH]          # file verbs: no FSKit
+container mount stat [-L] [USER@]TARGET:PATH
+container mount cat [USER@]TARGET:PATH...
+container mount copy SRC DEST                         # alias cp
+container mount prepare --id ID --format json         # create-time references
+container mount --version [--format json]             # interface number
 ```
+
+Implemented today: `ls`, `stat`, `cat`, `copy`/`cp`, `list` (always
+empty until `attach`), `help`, `--version`. **Resolution:** options
+first; `--` ends option *and* verb recognition, so the next word is a
+TARGET whatever it spells; otherwise a reserved verb is a subcommand
+and anything else is the TARGET of an implied `attach`. A word one
+edit from a verb is refused with "did you mean" rather than looked up.
+Reserved now, not yet implemented: `attach detach inspect prune mv rm
+mkdir rmdir ln touch chmod chown du df find sync export import edit
+open events prepare`. The implied form is interactive shorthand:
+scripts and container-distro always name the verb and use `--`, so a
+verb added later can't capture a container of that name for them.
+
+**Addressing** (`src/bin/container-mount/plugin/cli.rs`):
+`[USER@]TARGET:PATH` is remote when the part before the first `:` is a
+slash-free name (container ids and machine names have no `:` or `@`);
+anything else is a host path — `./a:b` for a host name with a colon.
+PATH is absolute, or relative to the user's home; `~`/`~/x` is that
+home and `~NAME/x` another user's. `copy` covers every direction:
+host to guest, guest to host, guest to the same guest as the same user
+(a server-side `Copy`, reflinked where possible), and guest to another
+guest or another user (two sessions, staged through a private host
+file, sparse-preserving). `container copy` rejects relative guest
+paths and guest-to-guest copies, so all of this extends it. Directory
+copies are not implemented yet.
+
+**Users.** The user — `USER@` on the reference, else `--user`, else a
+machine's provisioned account (`userSetup` `uid:gid`), else the
+container's init-process user, else root — is passed to `serve
+--user`, which resolves it by the guest's own rules (protocol.md
+"Users"). It decides the home for relative paths and owns new files
+with its primary group: `copy f root@web:x` writes `/root/x` as `0:0`,
+`copy f alice@web:x` writes `~alice/x` as alice and her group. It is
+**not** a permission check: the server still reads and writes as guest
+root, the reach `container exec` already gives.
+
+An interactive `open TARGET` session (ftp vocabulary: `cd`, `get`,
+`put`, `lcd`, …, plus `-b` batch files) is planned after 0.1.0; one
+server and handshake serve every command in it.
 
 ### What container-distro does with it
 
 | container-distro operation     | Plugin call                                                |
 | ------------------------------ | ---------------------------------------------------------- |
-| mount a running distro         | `container mount <runtime-id> [DIR]`                       |
+| mount a running distro         | `container mount attach -- <runtime-id> [DIR]`             |
 | mount a stopped distro         | under the distro lock: `--disk <journal disk> --exclusive` |
-| `distro fs ...` file ops       | `container mount fs <runtime-id> ...`                      |
+| `distro fs ...` file ops       | `container mount <verb> -u <user> -- <runtime-id>:PATH`    |
 | `start` a distro               | `list --format json`; refuse if its disk is held           |
-| `stop` / `rm` a mounted distro | `container umount <runtime-id>` first                      |
+| `stop` / `rm` a mounted distro | `container mount detach -- <runtime-id>` first             |
 | materialize with files on      | optionally add `prepare` output to `create` args           |
 | `--restricted` distro          | never calls the plugin (policy only -- see below)          |
 
@@ -365,8 +413,9 @@ and adds a socket relay as a second transport. Sketch:
 
 ### Compatibility
 
-`container mount version --format json` reports `{ "interface": N,
-"version": "<container-mount version>" }`. container-distro declares the
+`container mount --version --format json` reports `{ "interface": N,
+"version": "<container-mount version>", "protocol": P }`; interface 2
+is the verb surface above (1 was the first slice's `fs`/`version`). container-distro declares the
 interface range it understands and treats anything else as "plugin
 absent", with a message naming both versions. A missing plugin shows
 up as `container`'s unknown-command error, which container-distro maps
@@ -375,9 +424,9 @@ to the same message.
 ### Presenting the mount
 
 The FSKit module. Until that lands there is no first-party way to
-present a mount point, so `container mount fs` (the old `container
-distro fs` verbs, generalized) comes first and `container mount
-TARGET DIR` arrives with FSKit. macFUSE or FUSE-T could be an
+present a mount point, so the file verbs (the old `container distro
+fs` commands, generalized) come first and `container mount TARGET
+DIR` arrives with FSKit. macFUSE or FUSE-T could be an
 optional earlier back-end, at the cost of a third-party install.
 
 ## Why not virtiofs (or another standard protocol)
@@ -470,7 +519,7 @@ the code, not before:
 - Release layout: the servers directory must be shareable read-only
   as a unit (it already is — `libexec/container-mount/`).
 - The `mount` plugin binary: the dial client (raw XPC, done),
-  `fs` and `version` (done), plugin install into `container`'s plugin
+  the file verbs and `--version` (done), plugin install into `container`'s plugin
   root (`install-all`, done), the helper VM, and `prepare`/`list`.
 
 The first plugin slice is in `src/bin/container-mount/plugin/` and
@@ -488,9 +537,8 @@ No GitHub issues are filed for these yet.
   explicit entrypoint?
 - Whether upstream would take a `container dial`-style CLI verb, which
   would turn the L1 dependency back into an L0 one.
-- Plugin verbs vs container ids: `fs`, `list`, `prepare`, and
-  `version` are also valid container names. Reserve them, require
-  `--` before such a TARGET, or move them under flags?
+- ~~Plugin verbs vs container ids~~ — settled: reserved verbs, `--`
+  ends verb recognition, `--version` is a flag (see Surface).
 - ~~Plugin packaging~~ — settled: the same binary, dispatched on its
   file name (`bin/mount`), as container-distro does with `bin/distro`.
   Until it is installed, `container-mount plugin ...` runs the same

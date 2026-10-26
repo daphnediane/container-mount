@@ -176,7 +176,7 @@ fn long_row(name: &str, a: &Attr, target: Option<Vec<u8>>) -> Vec<String> {
     ]
 }
 
-fn ls(c: &Client, path: &str, long: bool) -> Result<()> {
+pub(crate) fn ls(c: &Client, path: &str, long: bool) -> Result<()> {
     let r = c.resolve(path.as_bytes(), true)?;
     if r.attr.kind != FileKind::Dir {
         let target = (r.attr.kind == FileKind::Symlink)
@@ -223,7 +223,7 @@ fn ls(c: &Client, path: &str, long: bool) -> Result<()> {
     Ok(())
 }
 
-fn stat(c: &Client, path: &str, dereference: bool) -> Result<()> {
+pub(crate) fn stat(c: &Client, path: &str, dereference: bool) -> Result<()> {
     let r = c.resolve(path.as_bytes(), dereference)?;
     let a = &r.attr;
     println!("  path: {}", display(&r.path));
@@ -351,7 +351,7 @@ fn extents_unsupported(e: &anyhow::Error) -> bool {
         if *e == Errno::EOPNOTSUPP)
 }
 
-fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
+pub(crate) fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
     let r = c.resolve(path.as_bytes(), true)?;
     match r.attr.kind {
         FileKind::File => {}
@@ -504,7 +504,7 @@ fn pump_write(c: &Client, fh: u64, input: &mut impl Read) -> Result<()> {
     }
 }
 
-fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
+pub(crate) fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
     let stdin = src.as_os_str() == "-";
     let (file, perm) = if stdin {
         (None, 0o644)
@@ -570,7 +570,7 @@ fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
 /// `cp` — a guest-side copy: reflinked where the filesystem allows,
 /// hole-preserving otherwise, never a wire round trip. The destination
 /// must not exist (exclusive create).
-fn cp(c: &Client, src: &str, path: &str) -> Result<()> {
+pub(crate) fn cp(c: &Client, src: &str, path: &str) -> Result<()> {
     let r = c.resolve(src.as_bytes(), true)?;
     match r.attr.kind {
         FileKind::File => {}

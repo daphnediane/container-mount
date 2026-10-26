@@ -41,6 +41,11 @@ server, generates the token, and passes the client its arguments.
   copy once running, which narrows the window but doesn't close it.
   The risk is guest-internal (guest uid to guest root): everything
   that protects the host is in the client.
+- **`USER@`/`--user` pick a home and an owner, not permissions.** The
+  plugin's user decides where relative paths land and who owns new
+  files; the server still reads and writes as guest root, so
+  `alice@web:/etc/shadow` reads. Same reach as `container exec`; real
+  per-user access checks would be a separate, opt-in server mode.
 - **Guest root sees the session token.** The server's initial
   environment stays readable in `/proc/<pid>/environ` to guest root —
   who already has every file the token unlocks.
