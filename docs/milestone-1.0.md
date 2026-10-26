@@ -17,7 +17,9 @@ aren't repeated here — only the 1.0-specific deltas are.
 - [ ] **Close the `1.0` milestone** — the items under
   [docs/work/](work/README.md#10-milestone) (`gh issue list
   --milestone 1.0`; #2 and #3 done 2026-10-26), including the
-  crates.io decision (#1) and the normative wire contract (#6).
+  crates.io decision (#1), the normative wire contract (#6), and the
+  point of the project: real mount points — the FSKit front end (#7)
+  and `container mount attach`/`detach` (#20).
 - [x] **GPG signatures, or not** — matched container-distro: signed
   release tarballs carry a `gpg --detach-sign` `.asc` next to the
   code-signature `.sig` (`GPG_KEY_ID` in `signing.local.conf`).

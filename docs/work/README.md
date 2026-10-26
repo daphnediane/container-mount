@@ -28,6 +28,10 @@ in [milestone-1.0.md](../milestone-1.0.md).
   cargo feature + man pages ([#5])
 - [protocol/1.0/wire-contract.md](protocol/1.0/wire-contract.md) —
   normative protocol contract doc ([#6])
+- [fskit/1.0/fskit-front-end.md](fskit/1.0/fskit-front-end.md) — the
+  FSKit file system front end ([#7])
+- [mounts/1.0/attach-detach.md](mounts/1.0/attach-detach.md) —
+  `container mount attach`/`detach` mount points ([#20])
 
 ### `future` (no milestone)
 
@@ -36,16 +40,15 @@ in [milestone-1.0.md](../milestone-1.0.md).
   [file-verbs](plugin/future/file-verbs.md) ([#24]),
   [dev-apiserver-requirement](plugin/future/dev-apiserver-requirement.md)
   ([#26])
-- fskit/ — [fskit-front-end](fskit/future/fskit-front-end.md) ([#7]),
-  [inotify-invalidation](fskit/future/inotify-invalidation.md) ([#8])
+- fskit/ — [inotify-invalidation](fskit/future/inotify-invalidation.md)
+  ([#8])
 - server/ — [later-capabilities](server/future/later-capabilities.md)
   ([#9]), [stdio-transport](server/future/stdio-transport.md) ([#11]),
   [serve-root](server/future/serve-root.md) ([#12]),
   [serve-ports](server/future/serve-ports.md) ([#13]),
   [permission-checks](server/future/permission-checks.md) ([#25])
 - mounts/ — [distro-to-distro](mounts/future/distro-to-distro.md)
-  ([#10]), [attach-detach](mounts/future/attach-detach.md) ([#20]),
-  [stopped-targets](mounts/future/stopped-targets.md) ([#21])
+  ([#10]), [stopped-targets](mounts/future/stopped-targets.md) ([#21])
 - protocol/ — [protocol-ranges](protocol/future/protocol-ranges.md)
   ([#14])
 - packaging/ —

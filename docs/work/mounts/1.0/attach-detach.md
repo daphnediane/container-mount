@@ -1,7 +1,7 @@
 # `attach` / `detach` mount points
 
 - **Issue:** [#20]
-- **Milestone:** none (future)
+- **Milestone:** `1.0`
 
 The implied `container mount TARGET [DIR]` and explicit
 `attach`/`detach`, presented through the FSKit front end ([#7]): session

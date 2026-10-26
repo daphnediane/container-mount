@@ -1,7 +1,7 @@
 # FSKit filesystem front-end
 
 - **Issue:** [#7]
-- **Milestone:** none (future)
+- **Milestone:** `1.0`
 
 The original motivation (`\\wsl$`-style mounts in Finder). The client
 library gets a C ABI so a sandboxed `FSUnaryFileSystem` module gets
