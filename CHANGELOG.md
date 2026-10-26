@@ -6,6 +6,8 @@ dev version in `Cargo.toml`): entries land there as work completes. At
 release time the `-dev` heading is renamed to `## X.Y.Z -- YYYY-MM-DD`
 and audited against the commit log.
 
+## 0.2.0-dev
+
 ## 0.1.0 -- 2026-10-26
 
 First release of container-mount, the `\\wsl$`-style file bridge split
