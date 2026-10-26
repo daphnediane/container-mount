@@ -118,12 +118,12 @@ fn cfr(src: RawFd, src_off: &mut u64, dst: RawFd, dst_off: &mut u64, len: u64) -
     Ok(n as u64)
 }
 
-/// Copy the range `[pos, pos+len)` from `src` to `dst` at `dpos`,
+/// Copy the range `[pos, pos+len)` from `src` to `dst` at `dst_pos`,
 /// skipping holes so a sparse source stays sparse. Returns `EINVAL`
 /// when the filesystem can't report extents — the caller retries with
 /// a dense copy. Returns the whole `len` on success (skipped holes
 /// count: they copied as holes).
-fn copy_extents(src: RawFd, mut pos: u64, dst: RawFd, mut dpos: u64, len: u64) -> R<u64> {
+fn copy_extents(src: RawFd, mut pos: u64, dst: RawFd, mut dst_pos: u64, len: u64) -> R<u64> {
     let stop = pos + len;
     while pos < stop {
         let start = match lseek(src, pos, libc::SEEK_DATA) {
@@ -134,11 +134,11 @@ fn copy_extents(src: RawFd, mut pos: u64, dst: RawFd, mut dpos: u64, len: u64) -
             break;
         }
         let end = lseek(src, start, libc::SEEK_HOLE)?.min(stop);
-        dpos += start - pos;
+        dst_pos += start - pos;
         let mut cur = start;
         while cur < end {
             let want = end - cur;
-            if cfr(src, &mut cur, dst, &mut dpos, want)? == 0 {
+            if cfr(src, &mut cur, dst, &mut dst_pos, want)? == 0 {
                 break;
             }
         }
@@ -230,7 +230,7 @@ fn falloc_mode(m: u32) -> R<libc::c_int> {
     Ok(out)
 }
 
-fn xname(name: &[u8]) -> R<CString> {
+fn xattr_name(name: &[u8]) -> R<CString> {
     if name.is_empty() || name.len() > XATTR_NAME_MAX {
         return Err(if name.len() > XATTR_NAME_MAX {
             Errno::ENAMETOOLONG
@@ -799,7 +799,7 @@ impl Conn {
                     return Err(Errno::EINVAL);
                 }
                 let f = self.xattr_fd(&n)?;
-                let xflags = match flags {
+                let xattr_flags = match flags {
                     0 => 0,
                     1 => libc::XATTR_CREATE,
                     _ => libc::XATTR_REPLACE,
@@ -808,10 +808,10 @@ impl Conn {
                 cvt(unsafe {
                     libc::fsetxattr(
                         f.as_raw_fd(),
-                        xname(&name)?.as_ptr(),
+                        xattr_name(&name)?.as_ptr(),
                         value.as_ptr().cast(),
                         value.len(),
-                        xflags,
+                        xattr_flags,
                     )
                 })?;
                 Ok(Reply::Ok)
@@ -820,7 +820,7 @@ impl Conn {
                 let n = self.node(node)?.writable()?;
                 let f = self.xattr_fd(&n)?;
                 // SAFETY: name is NUL-terminated; the fd is live.
-                cvt(unsafe { libc::fremovexattr(f.as_raw_fd(), xname(&name)?.as_ptr()) })?;
+                cvt(unsafe { libc::fremovexattr(f.as_raw_fd(), xattr_name(&name)?.as_ptr()) })?;
                 Ok(Reply::Ok)
             }
         }
@@ -934,7 +934,7 @@ impl Conn {
 
     fn get_xattr(&self, n: &NodeRef, name: &[u8]) -> R<Reply> {
         let f = self.xattr_fd(n)?;
-        let name = xname(name)?;
+        let name = xattr_name(name)?;
         // SAFETY: name is NUL-terminated; null/0 is a size query.
         let sz = unsafe { libc::fgetxattr(f.as_raw_fd(), name.as_ptr(), std::ptr::null_mut(), 0) };
         if sz < 0 {

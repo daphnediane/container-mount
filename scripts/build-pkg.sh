@@ -177,36 +177,36 @@ cp packaging/welcome.html packaging/conclusion.html "$RESOURCES/"
 # A signed pkg keeps the clean name; unsigned builds (CI without a
 # keychain) get the -unsigned convention — the maintainer adds the
 # signed build at draft-review time (docs/design/packaging.md).
-PKGNAME="container-mount-$version"
-[ -n "$PKG_IDENTITY" ] || PKGNAME="$PKGNAME-unsigned"
+PKG_NAME="container-mount-$version"
+[ -n "$PKG_IDENTITY" ] || PKG_NAME="$PKG_NAME-unsigned"
 if [ -n "$PKG_IDENTITY" ]; then
     productbuild --distribution "$OUT/Distribution.xml" \
         --resources "$RESOURCES" --package-path "$COMPONENT_DIR" \
         --sign "$PKG_IDENTITY" \
-        "$OUT/$PKGNAME.pkg"
+        "$OUT/$PKG_NAME.pkg"
 else
     productbuild --distribution "$OUT/Distribution.xml" \
         --resources "$RESOURCES" --package-path "$COMPONENT_DIR" \
-        "$OUT/$PKGNAME.pkg"
+        "$OUT/$PKG_NAME.pkg"
     echo "  (unsigned — see docs/design/packaging.md for the signing setup)"
 fi
 
 if [ -n "${NOTARY_PROFILE:-}" ] && [ -n "$PKG_IDENTITY" ]; then
     step "notarize + staple ($NOTARY_PROFILE)"
-    xcrun notarytool submit "$OUT/$PKGNAME.pkg" \
+    xcrun notarytool submit "$OUT/$PKG_NAME.pkg" \
         --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$OUT/$PKGNAME.pkg"
+    xcrun stapler staple "$OUT/$PKG_NAME.pkg"
 fi
 
 step "server bundle tarball"
 # container-mount-servers-<ver>.tar.gz — what `container-mount fetch-servers`
 # downloads.
-SDIR="container-mount-servers-$version"
-rm -rf "$OUT/$SDIR" "$OUT/$SDIR.tar.gz"
-mkdir -p "$OUT/$SDIR"
-cp "$PAYLOAD/libexec/container-mount"/container-mount-server-* "$OUT/$SDIR/"
-tar -czf "$OUT/$SDIR.tar.gz" -C "$OUT" "$SDIR"
-rm -rf "$OUT/$SDIR"
+SERVERS_DIR="container-mount-servers-$version"
+rm -rf "$OUT/$SERVERS_DIR" "$OUT/$SERVERS_DIR.tar.gz"
+mkdir -p "$OUT/$SERVERS_DIR"
+cp "$PAYLOAD/libexec/container-mount"/container-mount-server-* "$OUT/$SERVERS_DIR/"
+tar -czf "$OUT/$SERVERS_DIR.tar.gz" -C "$OUT" "$SERVERS_DIR"
+rm -rf "$OUT/$SERVERS_DIR"
 
 step "cargo-binstall tarball"
 # { name }-{ target }-v{ version }.tar.gz with a matching inner dir —
@@ -214,18 +214,18 @@ step "cargo-binstall tarball"
 # plus the server binaries, which `container-mount update` installs beside
 # them. Signed binary ⇒ clean name; unsigned ⇒ -unsigned (what
 # `update` picks only with consent).
-TDIR="container-mount-$TARGET-v$version"
-rm -rf "$OUT/$TDIR" "$OUT/$TDIR.tar.gz" "$OUT/$TDIR-unsigned.tar.gz"
-mkdir -p "$OUT/$TDIR"
+TARBALL_DIR="container-mount-$TARGET-v$version"
+rm -rf "$OUT/$TARBALL_DIR" "$OUT/$TARBALL_DIR.tar.gz" "$OUT/$TARBALL_DIR-unsigned.tar.gz"
+mkdir -p "$OUT/$TARBALL_DIR"
 cp "$R/container-mount" "$PAYLOAD/libexec/container-mount"/container-mount-server-* \
-    LICENSE THIRD-PARTY-NOTICES.yaml "$OUT/$TDIR/"
-TARNAME="$TDIR"
-[ -n "$APP_IDENTITY" ] || TARNAME="$TDIR-unsigned"
-tar -czf "$OUT/$TARNAME.tar.gz" -C "$OUT" "$TDIR"
-rm -rf "$OUT/$TDIR"
+    LICENSE THIRD-PARTY-NOTICES.yaml "$OUT/$TARBALL_DIR/"
+TAR_NAME="$TARBALL_DIR"
+[ -n "$APP_IDENTITY" ] || TAR_NAME="$TARBALL_DIR-unsigned"
+tar -czf "$OUT/$TAR_NAME.tar.gz" -C "$OUT" "$TARBALL_DIR"
+rm -rf "$OUT/$TARBALL_DIR"
 
 step "summary"
 pkgutil --payload-files "$COMPONENT_DIR/$COMPONENT" | sed 's/^/  /'
-SUMFILES="$OUT/$PKGNAME.pkg $OUT/$TARNAME.tar.gz $OUT/$SDIR.tar.gz"
-[ -f "$OUT/$SBOM.json" ] && SUMFILES="$SUMFILES $OUT/$SBOM.json"
-shasum -a 256 $SUMFILES | sed 's/^/  /'
+SUMMARY_FILES="$OUT/$PKG_NAME.pkg $OUT/$TAR_NAME.tar.gz $OUT/$SERVERS_DIR.tar.gz"
+[ -f "$OUT/$SBOM.json" ] && SUMMARY_FILES="$SUMMARY_FILES $OUT/$SBOM.json"
+shasum -a 256 $SUMMARY_FILES | sed 's/^/  /'

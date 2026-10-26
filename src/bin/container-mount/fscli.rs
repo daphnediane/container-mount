@@ -98,6 +98,7 @@ fn display(path: &[Vec<u8>]) -> String {
     }
 }
 
+// cspell:ignore drwxr rwsr drwxrwxrwt lrwxrwxrwx
 /// `drwxr-xr-x`-style, with setuid/setgid/sticky folded in.
 fn mode_string(a: &Attr) -> String {
     let kind = match a.kind {

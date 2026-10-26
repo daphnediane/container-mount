@@ -14,7 +14,7 @@
 //! can only publish those.
 //!
 //! There is no public `connectat`/`bindat` on macOS, so `connect(2)`
-//! resolves a path and follows symlinks; the defence is layered
+//! resolves a path and follows symlinks; the defense is layered
 //! instead (docs/design/security.md):
 //!
 //! 1. the socket's directory may not be replaceable or its contents
@@ -298,7 +298,7 @@ pub fn socket_path(key: &str) -> Result<PathBuf> {
 
 /// Connect to a Unix socket after checking the directory it lives in
 /// keeps the leaf stable ([`dir_keeps_leaf`]) and the leaf is a socket
-/// owned by us or root. Defence in depth — the peer check after connect
+/// owned by us or root. Defense in depth — the peer check after connect
 /// is what makes a residual race irrelevant.
 fn unix_transport(path: &Path) -> io::Result<UnixStream> {
     let parent = path

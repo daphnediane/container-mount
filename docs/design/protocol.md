@@ -39,7 +39,7 @@ client defends in three layers (`src/connect.rs`):
    `0700`, or we refuse. This also protects the relay's
    `unlink` + `bind` of the path, which follows directory components.
 2. **Leaf:** `fstatat(dirfd, name, AT_SYMLINK_NOFOLLOW)` must show
-   `S_ISSOCK` and our uid. Defence in depth only — it narrows the race
+   `S_ISSOCK` and our uid. Defense in depth only — it narrows the race
    window, it can't close it.
 3. **Peer, after connect** — what makes the race irrelevant:
    `--peer-requirement <string>` is enforced against the connected

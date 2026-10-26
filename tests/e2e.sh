@@ -91,8 +91,9 @@ case "$ENGINE" in
             container-mount-e2e /container-mount serve \
             --socket /var/lib/container-mount/container-mount.sock --idle-secs 300 \
             >/dev/null
+        # cspell:ignore UPBK2H6LZM
         PEER_REQ='identifier "com.apple.container.container-runtime-linux" and anchor apple generic and certificate leaf[subject.OU] = "UPBK2H6LZM"'
-        CARGS=(--socket "$HOST_SOCK" --peer-requirement "$PEER_REQ")
+        CLIENT_ARGS=(--socket "$HOST_SOCK" --peer-requirement "$PEER_REQ")
         ;;
     podman|docker)
         "$ENGINE" build -t container-mount-e2e -f "$SCRATCH/Dockerfile" "$SCRATCH" >/dev/null
@@ -103,11 +104,11 @@ case "$ENGINE" in
             --idle-secs 300 >/dev/null
         PORT="$("$ENGINE" port "$NAME" 8765/tcp | head -1 | sed 's/.*://')"
         [ -n "$PORT" ] || die "couldn't learn the published port"
-        CARGS=(--tcp "127.0.0.1:$PORT")
+        CLIENT_ARGS=(--tcp "127.0.0.1:$PORT")
         ;;
 esac
 
-cli() { CONTAINER_MOUNT_TOKEN="$TOKEN" "$CLIENT" --timeout 15 "${CARGS[@]}" "$@"; }
+cli() { CONTAINER_MOUNT_TOKEN="$TOKEN" "$CLIENT" --timeout 15 "${CLIENT_ARGS[@]}" "$@"; }
 
 log "engine=$ENGINE arch=$ARCH — waiting for the server"
 ok=0
@@ -171,7 +172,7 @@ echo "$out" | grep -q 'target: ../etc/hostname' \
 
 # A wrong token must never handshake.
 if CONTAINER_MOUNT_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
-    "$CLIENT" --timeout 3 "${CARGS[@]}" check >/dev/null 2>&1; then
+    "$CLIENT" --timeout 3 "${CLIENT_ARGS[@]}" check >/dev/null 2>&1; then
     log "FAIL bad token authenticated"
     fail=1
 else
