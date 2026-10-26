@@ -29,8 +29,10 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
    both musl targets, release musl builds, `cargo test`, shell syntax,
    `cargo audit`, `cargo deny`, `THIRD-PARTY-NOTICES.yaml` freshness
    (regenerate with `cargo bundle-licenses -f yaml -o
-   THIRD-PARTY-NOTICES.yaml` if stale), and `tests/e2e.sh` when an OCI
-   engine is up. Confirm [work] lists only still-open work and the
+   THIRD-PARTY-NOTICES.yaml` if stale), `tests/e2e.sh` when an OCI
+   engine is up, and `tests/plugin-e2e.sh` when Apple `container` is
+   running (`PLUGIN_E2E_MACHINE=1` adds the slow machine target — run
+   it at least once per release). Confirm [work] lists only still-open work and the
    docs reflect what shipped.
 2. Update `CHANGELOG.md`: rename the running `## X.Y.Z-dev` section to
    `## X.Y.Z -- YYYY-MM-DD` and audit it against `git log --oneline

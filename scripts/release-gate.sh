@@ -56,4 +56,13 @@ else
     echo "==> e2e skipped (no OCI engine)"
 fi
 
+# The plugin path leans on upstream internals (the dial route, copy and
+# exec semantics) — exactly what a release must not ship untested.
+if command -v container >/dev/null 2>&1 && container system status >/dev/null 2>&1; then
+    step "tests/plugin-e2e.sh${PLUGIN_E2E_MACHINE:+ --machine}"
+    tests/plugin-e2e.sh ${PLUGIN_E2E_MACHINE:+--machine}
+else
+    echo "==> plugin e2e skipped (Apple container not running)"
+fi
+
 printf '\nrelease gate: all checks passed\n'

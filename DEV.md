@@ -106,7 +106,9 @@ draft release — see [docs/design/packaging.md] and
 - `scripts/build-servers.sh` — just the musl builds; `--install
   PREFIX` copies them into `PREFIX/libexec/container-mount/`.
 - `scripts/release-gate.sh` — the pre-tag gate (above + musl
-  clippy/build, notices freshness, e2e when an engine is up).
+  clippy/build, notices freshness, e2e when an engine is up, plugin
+  e2e when `container` is running; `PLUGIN_E2E_MACHINE=1` adds the
+  machine target).
 
 [docs/design/packaging.md]: docs/design/packaging.md
 [install-layout]: docs/design/install-layout.md
