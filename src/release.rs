@@ -30,7 +30,7 @@ use sha2::{Digest, Sha256};
 
 /// The GitHub repo releases come from — matches Cargo.toml's
 /// `repository`, restated here so a typo can't redirect the download.
-pub const REPO: &str = "daphnediane/distrofs";
+pub const REPO: &str = "daphnediane/container-mount";
 /// The dev-only override for the releases API base.
 pub const RELEASES_URL_ENV: &str = "DISTROFS_RELEASES_URL";
 

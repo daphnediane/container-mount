@@ -9,10 +9,12 @@ container-distro.
 
 Everything lives under `/Volumes/CaseSens/Repositories/mine/container-distro/`:
 
-- `bare/` — bare git repos (`container-distro.git`, `distrofs.git`)
-- `main/` — container-distro worktree
-- `distrofs/` — **this repo's** worktree (`bare/distrofs.git`, remote:
-  `git@github.com:daphnediane/distrofs.git`)
+- `bare/` — bare git repos (`container-distro.git`,
+  `container-mount.git`)
+- `main/` — container-distro worktree (`main-distrofs/` holds its
+  `feature/distrofs` branch)
+- `mount/` — **this repo's** worktree (`bare/container-mount.git`,
+  remote: `git@github.com:daphnediane/container-mount.git`)
 - `workspace/` — scratch dir
 
 ## What moved here
@@ -66,3 +68,25 @@ token, and mapped arguments, and propagates its exit code.
 - **Protocol version is the compatibility contract** between
   independently-released distrofs and container-distro
   (`proto::VERSION`, embedded stamps).
+
+## Rename to container-mount
+
+In October 2026 the repo (and its GitHub remote) was renamed from
+`distrofs` to `container-mount`, to match the new direction in
+[mount-backends.md](mount-backends.md): a `container mount` plugin
+that owns host file access for any container, with container-distro
+loosely coupled to it through the plugin's CLI instead of driving the
+`distrofs` binary itself.
+
+- **Renamed:** the repo, worktree (`mount/`), bare repo, and GitHub
+  URLs. Issue numbers carried over with the repo.
+- **Not renamed (yet):** the crate, binary, wire protocol (handshake
+  magic, `DISTROFS_TOKEN`, version stamps), server binaries
+  (`distrofs-server-*`), release artifacts, and signing identifier
+  still say `distrofs`. Nothing depends on those names — no release
+  has shipped, the protocol is lock-step before 1.0, and
+  container-distro's `main` carries no distrofs integration — so
+  renaming them is a free choice to make before the first release.
+- container-distro's `feature/distrofs` integration predates the new
+  direction; it is reference material, not a consumer. container-distro
+  will integrate afresh against the plugin.

@@ -1,6 +1,6 @@
-# Developing distrofs
+# Developing container-mount
 
-Building, testing, and releasing. Contributing conventions live in
+Building, testing, and releasing the `distrofs` crate and binary. Contributing conventions live in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Prerequisites

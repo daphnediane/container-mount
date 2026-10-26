@@ -8,5 +8,5 @@ message/enum tables, exact HMAC inputs, and the version/capability
 negotiation spelled out as normative text so a second implementation
 could interop.
 
-[#6]: https://github.com/daphnediane/distrofs/issues/6
+[#6]: https://github.com/daphnediane/container-mount/issues/6
 [protocol]: ../../../design/protocol.md

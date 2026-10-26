@@ -8,5 +8,5 @@ identity, per-op availability, transport) in [portability]. macOS
 first: same syscall family, buys container-free testing, exercises
 the code the FSKit front-end will front.
 
-[#13]: https://github.com/daphnediane/distrofs/issues/13
+[#13]: https://github.com/daphnediane/container-mount/issues/13
 [portability]: ../../../design/server-portability.md

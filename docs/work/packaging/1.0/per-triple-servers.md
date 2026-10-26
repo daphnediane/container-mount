@@ -10,5 +10,5 @@ in the pkg, the servers bundle, and the client tarball;
 `--fetch` (ensure-then-print). No legacy flat-name fallback — nothing
 has shipped. [install-layout]
 
-[#3]: https://github.com/daphnediane/distrofs/issues/3
+[#3]: https://github.com/daphnediane/container-mount/issues/3
 [install-layout]: ../../../design/install-layout.md

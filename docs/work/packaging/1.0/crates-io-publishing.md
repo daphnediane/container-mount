@@ -13,6 +13,6 @@ commitment: the handshake and wire format documented as a contract
 decided, install paths are the `.pkg`, the binstall tarball, `cargo
 install --path`, and `distrofs update`/`fetch-servers` ([packaging]).
 
-[#1]: https://github.com/daphnediane/distrofs/issues/1
+[#1]: https://github.com/daphnediane/container-mount/issues/1
 [packaging]: ../../../design/packaging.md
 [protocol]: ../../../design/protocol.md

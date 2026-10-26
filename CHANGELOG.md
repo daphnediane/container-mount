@@ -10,7 +10,8 @@ and audited against the commit log.
 
 ### Added
 
-- Initial standalone release, split out of
+- Initial standalone release of the container-mount project (repo
+  formerly `distrofs`), split out of
   [container-distro](https://github.com/daphnediane/container-distro):
   one `distrofs` crate/binary carrying the wire protocol, the
   validating host client (`ls`, `stat`, `get`, `put`, `check`), and

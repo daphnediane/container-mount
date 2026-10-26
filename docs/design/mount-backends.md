@@ -456,7 +456,7 @@ the code, not before:
   in front of Finder, Quick Look, and Spotlight — mount `nobrowse`, as
   for distros (container-distro's T13).
 
-## What this implies for distrofs
+## What this implies for this repo
 
 - `serve --listen vsock:PORT` — new server transport (`AF_VSOCK`;
   `libc::sockaddr_vm` is bound for Linux). Host side needs nothing new:
@@ -486,14 +486,15 @@ No GitHub issues are filed for these yet.
 - Plugin verbs vs container ids: `fs`, `list`, `prepare`, and
   `version` are also valid container names. Reserve them, require
   `--` before such a TARGET, or move them under flags?
-- Plugin home: a second binary in this repo (proposed), a cargo
-  feature, or its own repo.
-- Project name: renaming the repo and crate to `container-mount`
-  (free on crates.io and GitHub as of 2026-10-25) while keeping
-  `distrofs` as the protocol and server name — the handshake magic,
-  `DISTROFS_TOKEN`, version stamps, `distrofs-server-*` binaries —
-  avoids churning the wire contract. Renaming those too is a protocol
-  break, plus a new signing identifier container-distro pins.
+- Plugin packaging: a second `[[bin]]` in the `distrofs` crate, or a
+  cargo feature.
+- Crate and protocol names: the repo is now `container-mount` (see
+  [history.md](history.md#rename-to-container-mount)); the crate,
+  binary, protocol, and server names are still `distrofs`, and
+  `container-mount` was unclaimed on crates.io as of 2026-10-25.
+  Nothing depends on the old names yet, so whether to rename them is
+  open until the first release; the crate name also ties into the
+  crates.io publishing decision ([#1]).
 - Exclusive-mode lifetime: an FSKit mount outlives any CLI call, so
   something long-lived (the FSKit agent, or a supervisor tied to the
   helper container) must hold the disk. Is `list` enough for
@@ -503,4 +504,5 @@ No GitHub issues are filed for these yet.
 [host-file-access]: https://github.com/daphnediane/container-distro/blob/main/docs/design/host-file-access.md
 [integration levels]: https://github.com/daphnediane/container-distro/blob/main/docs/design/lower-level-integration.md
 [podman-mount(1)]: https://docs.podman.io/en/latest/markdown/podman-mount.1.html
-[#11]: https://github.com/daphnediane/distrofs/issues/11
+[#1]: https://github.com/daphnediane/container-mount/issues/1
+[#11]: https://github.com/daphnediane/container-mount/issues/11

@@ -8,4 +8,4 @@ The e2e fixture for `fetch-servers`/`update` is hand-rolled today
 container-distro's would make the verified-download path part of the
 regular test loop.
 
-[#18]: https://github.com/daphnediane/distrofs/issues/18
+[#18]: https://github.com/daphnediane/container-mount/issues/18

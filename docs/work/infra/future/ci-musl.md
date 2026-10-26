@@ -6,4 +6,4 @@
 The release gate covers them locally; add a clippy/build job if
 pre-merge musl regressions start slipping through.
 
-[#17]: https://github.com/daphnediane/distrofs/issues/17
+[#17]: https://github.com/daphnediane/container-mount/issues/17

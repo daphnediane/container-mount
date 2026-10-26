@@ -9,4 +9,4 @@ expose the struct), BSD file flags (`FS_IOC_*FLAGS` ↔ chflags;
 advisory locks if FSKit surfaces them, batch `Lookup` for deep paths.
 `Mknod` stays deliberately absent.
 
-[#9]: https://github.com/daphnediane/distrofs/issues/9
+[#9]: https://github.com/daphnediane/container-mount/issues/9

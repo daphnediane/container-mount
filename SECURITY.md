@@ -1,7 +1,7 @@
 # Security Policy
 
-> **Draft.** `distrofs` is pre-1.0 with a single maintainer; this
-> policy is adopted ahead of need. Anything marked `[TODO]` is a
+> **Draft.** container-mount (`distrofs`) is pre-1.0 with a single
+> maintainer; this policy is adopted ahead of need. Anything marked `[TODO]` is a
 > placeholder for response expectations and disclosure details.
 
 ## Supported Versions

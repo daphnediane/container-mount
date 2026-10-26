@@ -10,5 +10,5 @@ and passes the authenticated fd over XPC. Phased plan and the
 host-side app live in container-distro's [host-file-access]; the C
 ABI + inotify event ops land here first.
 
-[#7]: https://github.com/daphnediane/distrofs/issues/7
+[#7]: https://github.com/daphnediane/container-mount/issues/7
 [host-file-access]: https://github.com/daphnediane/container-distro/blob/main/docs/design/host-file-access.md

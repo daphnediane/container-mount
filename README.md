@@ -1,8 +1,21 @@
-# distrofs
+# container-mount
 
 Host access to a Linux guest's filesystem — a `\\wsl$`-style file
 bridge, split out of [container-distro] so any container/VM
 environment can use it.
+
+The project has two layers:
+
+- **distrofs** — the wire protocol, the guest file server, and the
+  validating host client, all in one `distrofs` binary (below). The
+  crate, binary, protocol, and release artifacts still carry that
+  name; whether they follow the rename is open until the first
+  release.
+- **`container mount`** (in design) — a `podman mount`-style plugin
+  for Apple's `container` that reaches *any* container, stopped disk,
+  or image, and that container-distro calls for its distro mounts
+  through the plugin's CLI alone. See
+  [docs/design/mount-backends.md](docs/design/mount-backends.md).
 
 One `distrofs` binary, both ends:
 

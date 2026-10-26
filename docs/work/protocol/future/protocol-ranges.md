@@ -7,5 +7,5 @@
 post-1.0, a server-advertised protocol range replaces strict equality
 (needs a new hello variant + compat matrix). [install-layout]
 
-[#14]: https://github.com/daphnediane/distrofs/issues/14
+[#14]: https://github.com/daphnediane/container-mount/issues/14
 [install-layout]: ../../../design/install-layout.md

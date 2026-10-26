@@ -6,8 +6,8 @@ edition = "2024"
 rust-version = "1.89"
 license = "BSD-2-Clause"
 authors = ["Daphne Pfister"]
-homepage = "https://github.com/daphnediane/distrofs"
-repository = "https://github.com/daphnediane/distrofs"
+homepage = "https://github.com/daphnediane/container-mount"
+repository = "https://github.com/daphnediane/container-mount"
 readme = "README.md"
 # Published crate stays lean: binaries + assets + notices only.
 exclude = [

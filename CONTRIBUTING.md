@@ -1,6 +1,7 @@
 # Contributing
 
-**Draft.** `distrofs` is a personal project with, so far, a single
+**Draft.** container-mount (the `distrofs` binary and, in design, the
+`container mount` plugin) is a personal project with, so far, a single
 maintainer — this file exists ahead of need. Issues and pull requests
 are still welcome; anything marked `[TODO]` is a placeholder that will
 be filled in if a real community forms.
@@ -76,4 +77,4 @@ Contributions are licensed under the project's
 [BSD-2-Clause License](LICENSE). By submitting a pull request you
 agree your contribution is provided under those terms.
 
-[issue]: https://github.com/daphnediane/distrofs/issues
+[issue]: https://github.com/daphnediane/container-mount/issues

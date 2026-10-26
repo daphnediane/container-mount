@@ -10,5 +10,5 @@ already-fetched, non-bundled triples and unwritable prefixes fetch to
 (lock-step own-version bundles). Uninstall gains a keep/delete prompt
 — distrofs's first per-user state. [install-layout]
 
-[#4]: https://github.com/daphnediane/distrofs/issues/4
+[#4]: https://github.com/daphnediane/container-mount/issues/4
 [install-layout]: ../../../design/install-layout.md

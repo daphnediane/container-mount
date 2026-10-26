@@ -7,5 +7,5 @@ Default-on derive frontend, off for musl builds; `clap_mangen` pages
 plus `install-man`/`uninstall-man`; conformance test running a shared
 argv corpus through both parsers. [install-layout]
 
-[#5]: https://github.com/daphnediane/distrofs/issues/5
+[#5]: https://github.com/daphnediane/container-mount/issues/5
 [install-layout]: ../../../design/install-layout.md
