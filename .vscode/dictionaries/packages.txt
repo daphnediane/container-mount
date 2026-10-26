@@ -10,6 +10,7 @@ fskit
 Kata
 libc
 mangen
+openpgp
 osxfuse
 pemfile
 reqwest

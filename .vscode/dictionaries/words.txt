@@ -118,6 +118,7 @@ inodes
 inotify
 ioctls
 journaled
+keyserver
 lchown
 libexec
 linkat

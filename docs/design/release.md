@@ -57,10 +57,12 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
    replace before publishing:
 
    ```bash
-   scripts/build-pkg-signed.sh   # signs + notarizes/staples
-   gh release upload vX.Y.Z scratch/pkg/container-mount-X.Y.Z.pkg \
-       scratch/pkg/container-mount-aarch64-apple-darwin-vX.Y.Z.tar.gz \
-       --clobber
+   scripts/build-pkg-signed.sh                 # worktree of the tag; signs +
+                                               # notarizes/staples; tarball
+                                               # gets .sig (+.asc)
+   scripts/upload-release-artifacts.sh vX.Y.Z  # verifies them and swaps
+                                               # the signed artifacts in
+                                               # for the unsigned ones
    ```
 
    Review the draft and publish (`gh release edit vX.Y.Z

@@ -18,10 +18,9 @@ aren't repeated here — only the 1.0-specific deltas are.
   [docs/work/](work/README.md#10-milestone) (`gh issue list
   --milestone 1.0`; #1–#6 open as of 2026-10-25), including the
   crates.io decision (#1) and the normative wire contract (#6).
-- [ ] **GPG signatures, or not** — container-distro's release tarball
-  carries a `gpg --detach-sign` `.asc`; container-mount's signing
-  config has no GPG key, so its tarballs get the code signature only.
-  Match container-distro or document the difference.
+- [x] **GPG signatures, or not** — matched container-distro: signed
+  release tarballs carry a `gpg --detach-sign` `.asc` next to the
+  code-signature `.sig` (`GPG_KEY_ID` in `signing.local.conf`).
 - [ ] **Final review of [design/security.md](design/security.md)** —
   one pass over the trade-offs and the client/server enforcement
   lists against what actually shipped, including anything the

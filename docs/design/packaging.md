@@ -80,19 +80,68 @@ embedder contract are in [install-layout.md](install-layout.md).
 ## Signing and notarization
 
 CI has no keychain, so `release.yml` attaches `-unsigned` artifacts;
-the maintainer replaces them at draft review:
+the maintainer adds the signed ones at draft review:
 
 ```bash
-scripts/build-pkg-signed.sh   # sources packaging/signing.local.conf
+scripts/build-pkg-signed.sh                 # sources packaging/signing.local.conf
+scripts/upload-release-artifacts.sh vX.Y.Z  # verifies, uploads, drops -unsigned
 ```
 
 `packaging/signing.local.conf` is gitignored (see
-`signing.conf.example`) and supplies `CODESIGN_IDENTITY` (Developer ID
-Application → `codesign --options runtime --timestamp` on the host
-binary), `PKG_SIGN_IDENTITY` (Developer ID Installer → `productbuild
---sign`), and `NOTARY_PROFILE` (`notarytool submit --wait` +
-`stapler staple`). Signed artifacts keep the clean names; the private
-key stays on the maintainer's Mac — CI signing is deliberately
-unwired, same as container-distro.
+`signing.conf.example`) and supplies the identities; the private keys
+stay on the maintainer's Mac — CI signing is deliberately unwired,
+same as container-distro.
+
+| What         | Identity                                                     | Tool                                          |
+| ------------ | ------------------------------------------------------------ | --------------------------------------------- |
+| host binary  | `Developer ID Application` (hardened runtime, `--timestamp`) | `codesign`                                    |
+| `.pkg`       | `Developer ID Installer`                                     | `productbuild --sign`                         |
+| tarball      | `Developer ID Application` detached signature (`.sig`)       | `codesign --detached --timestamp`             |
+| tarball      | `GPG_KEY_ID` armored signature (`.asc`, optional)            | `gpg --detach-sign`                           |
+| notarization | `NOTARY_PROFILE` keychain profile                            | `notarytool submit --wait` + `stapler staple` |
+
+The tarball's `.sig` is a detached code signature of the archive
+itself, so it verifies with `codesign --verify --detached=<file>.sig
+<file>` against the same Apple PKI chain as the binary inside; the
+`.asc` covers people who expect a PGP signature on a tarball. Both
+are sidecars because the `{name}-{target}-v{version}.tar.gz` name is
+fixed by the binstall metadata. That fixed name is also why unsigned
+builds mangle the archive name (`-unsigned.tar.gz`) instead of
+shipping the canonical name unsigned: the canonical assets only ever
+appear in their final signed form, so a signed upload adds assets
+instead of changing ones already on the release.
+`upload-release-artifacts.sh` verifies the pkg signature, the `.sig`,
+and the `.asc` when present, refuses to touch a release that is no
+longer a draft, and deletes the `-unsigned` pkg and tarball CI
+attached. The server bundle stays as CI built it — it has no signed
+variant.
+
+### Build provenance
+
+`build-pkg.sh` is an orchestrator over `scripts/pkg/`: `name.sh`
+computes artifact naming, `worktree.sh` manages build worktrees,
+`build.sh` compiles, `collect.sh` gathers the binaries and every
+source-tree input into the output dir, and `bundle.sh` signs and
+assembles from the output dir alone (`sign.sh` is its signing
+primitive). Because bundling is source-free, a build worktree only
+has to span compile + collect.
+
+- A clean checkout compiles inside a `git worktree` under `scratch/`
+  — of the `v<version>` tag when it exists, else of HEAD — so
+  uncommitted changes and a branch switch mid-build can't reach the
+  artifacts. The worktree build prefers the tag's own `scripts/pkg/`
+  helpers.
+- Unanchored builds mangle their names ahead of `-unsigned`:
+  `-<hash>` when HEAD isn't the tag, `-dirty` on a dirty tree. A
+  canonical name always means tag content.
+- Auto-detected signing only happens at the release tag. Elsewhere
+  the build stays unsigned unless `--sign` is explicit, and `--sign`
+  on an unanchored checkout refuses unless `--allow-dirty` is given
+  (a test build).
+- `--no-worktree` builds in place with the tag + clean requirement
+  still enforced — CI uses it, since the runner's checkout is already
+  the verified tag.
+- Every run re-checks HEAD, version, and tree status before bundling,
+  so a checkout that moved mid-build fails before anything is signed.
 
 [install-layout]: install-layout.md

@@ -24,7 +24,7 @@ step "cargo test --workspace"
 cargo test --workspace
 
 step "shell syntax"
-sh -n tests/*.sh scripts/*.sh packaging/*.sh
+sh -n tests/*.sh scripts/*.sh scripts/pkg/*.sh packaging/*.sh
 
 step "cargo audit"
 cargo audit

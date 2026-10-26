@@ -42,5 +42,10 @@ and audited against the commit log.
   the binstall client tarball, and the `container-mount-servers` bundle;
   `build-pkg-signed.sh` (Developer ID via gitignored
   `packaging/signing.local.conf`), `build-servers.sh`,
-  `install-local.sh`, `dev-clean.sh`; design docs in
+  `install-local.sh`, `dev-clean.sh`. Signed releases also sign the
+  binstall tarball (detached code signature `.sig` plus a GPG `.asc`;
+  the README's *Verifying downloads* lists the expected signers) and
+  build from a `git worktree` of the release tag, so a canonical
+  artifact name always means tag content; `upload-release-artifacts.sh`
+  verifies and swaps them in over the CI draft. Design docs in
   `docs/design/{protocol,security,filesystems,packaging,release,install-layout,server-portability}.md`.

@@ -76,9 +76,18 @@ integrity is the GitHub API-reported SHA-256 digest, checked before
 install — the digest is the trust root, not the transport.
 
 `scripts/build-pkg.sh` produces all release artifacts (also the
-macOS `.pkg` and the SBOM); `scripts/build-pkg-signed.sh` wraps it
-with the maintainer's Developer ID identities from the gitignored
-`packaging/signing.local.conf` — see [docs/design/packaging.md] and
+macOS `.pkg` and the SBOM) through the `scripts/pkg/` helpers. A
+clean checkout builds inside a `git worktree` of the release tag (or
+of HEAD for a dev build) under `scratch/`; `--no-worktree` builds in
+place with tag + clean still enforced, `--allow-dirty` drops that
+requirement. Unanchored builds get `-<hash>`/`-dirty` name mangling,
+unsigned ones `-unsigned`. `scripts/build-pkg-signed.sh` wraps it
+with the maintainer's Developer ID identities (and optional
+`GPG_KEY_ID`) from the gitignored `packaging/signing.local.conf`;
+signed builds also emit a detached code signature for the tarball
+(`*.tar.gz.sig`) plus a GPG `.asc`. `scripts/upload-release-artifacts.sh
+vX.Y.Z` verifies them and swaps the CI-built unsigned assets on the
+draft release — see [docs/design/packaging.md] and
 [docs/design/release.md].
 
 ## Maintainer scripts

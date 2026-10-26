@@ -27,9 +27,12 @@ Checklist for a minor release from `main`.
 5. The tag push runs `.github/workflows/release.yml`, which drafts a
    GitHub Release carrying `container-mount-servers-<ver>.tar.gz` and
    `container-mount-aarch64-apple-darwin-v<ver>-unsigned.tar.gz` — the asset
-   names `fetch-servers`/`update` look for. Review and publish the
-   draft; when Developer ID signing is configured, sign the binaries
-   locally and re-upload under the same names minus `-unsigned`.
+   names `fetch-servers`/`update` look for. When Developer ID signing
+   is configured, run `scripts/build-pkg-signed.sh` (builds a worktree
+   of the tag) then `scripts/upload-release-artifacts.sh vX.Y.Z`
+   (verifies the signatures, uploads the signed pkg + tarball +
+   `.sig`/`.asc`, deletes the `-unsigned` assets) before publishing
+   the draft.
 6. crates.io publish stays manual until the crate is meant to be
    published there.
 7. Open the next cycle: `cargo release version X.Y.0-dev -x

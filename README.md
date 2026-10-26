@@ -64,6 +64,40 @@ installed binary — it verifies the SHA-256 the release API reports,
 checks the macOS code signature on signed builds, and never
 self-elevates.
 
+## Verifying downloads
+
+Signed builds sign the pkg, the host binary, and the client tarball
+-- the tarball gets a detached code signature (`.tar.gz.sig`) and a
+`gpg --detach-sign` signature (`.tar.gz.asc`). Drafts and prereleases
+may still carry the `-unsigned` CI build.
+
+| Artifact                    | Check                                            |
+| --------------------------- | ------------------------------------------------ |
+| `.pkg`                      | `pkgutil --check-signature <file>.pkg`           |
+| `*.tar.gz` (code signature) | `codesign --verify --detached=<file>.sig <file>` |
+| `*.tar.gz` (GPG)            | `gpg --verify <file>.asc <file>`                 |
+| extracted `container-mount` | `codesign -dv <path>`                            |
+
+Expected signers:
+
+<!-- cspell:ignore AEDF dvvv -->
+
+- `.pkg`: `Developer ID Installer: Daphne Pfister (YN9EG6U9PY)`;
+  detached `.sig` + binary: `Developer ID Application: Daphne
+  Pfister (YN9EG6U9PY)`. The certificates chain to the Apple Root CA
+  (`codesign -dvvv --detached=` lists them under `Authority=`); the
+  signer name + team ID `YN9EG6U9PY` are the stable check.
+- `.asc`: GPG `29F8 7CBD 7DF6 A40E 2A44 7111 6F4D 7952 6D9B AEDF`
+  (Daphne Pfister <daphnediane@mac.com>). Fetch the public key with
+  `curl https://github.com/daphnediane.gpg | gpg --import` or `gpg
+  --keyserver keys.openpgp.org --recv-keys
+  29F87CBD7DF6A40E2A4471116F4D79526D9BAEDF` -- or import the copy in
+  [packaging/release-pubkey.asc](packaging/release-pubkey.asc).
+
+The musl servers are ELF and can't carry a Mac signature: the server
+bundle's integrity is the release digest `fetch-servers` checks plus
+the servers' embedded version stamp.
+
 ## Testing
 
 `tests/e2e.sh` exercises the real path against the first available OCI

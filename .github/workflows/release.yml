@@ -6,16 +6,17 @@ name: release
 # CHANGELOG section — the maintainer reviews and publishes the draft.
 #
 # Assets produced (the names `fetch-servers`/`update` look for):
-#   container-mount-<ver>-unsigned.pkg            — macOS installer; a signed
-#                                          copy replaces it minus
-#                                          `-unsigned`
+#   container-mount-<ver>-unsigned.pkg            — macOS installer; the
+#                                          signed copy replaces it
+#                                          minus `-unsigned`
 #   container-mount-servers-<ver>.tar.gz          — container-mount-server-aarch64 +
 #                                          container-mount-server-x86_64
 #   container-mount-aarch64-apple-darwin-v<ver>-unsigned.tar.gz
 #                                        — container-mount + both server
-#                                          binaries; signed copies are
-#                                          uploaded over this name
-#                                          minus `-unsigned`
+#                                          binaries; the signed copy
+#                                          (minus `-unsigned`, plus
+#                                          .sig/.asc) is added by
+#                                          scripts/upload-release-artifacts.sh
 #   THIRD-PARTY-NOTICES.yaml, SBOM when cargo-cyclonedx is present
 on:
   push:
@@ -48,12 +49,16 @@ jobs:
 
       - run: cargo test --workspace
 
+      # The cargo plugins build-pkg.sh calls — pinned so a new upstream
+      # release can't change the artifacts mid-release.
       - name: Install supply-chain tools
-        run: |
-          cargo install --locked cargo-auditable cargo-cyclonedx
+        run: cargo install --locked cargo-cyclonedx@0.5.9 cargo-auditable@0.7.7
 
       - name: Build release artifacts
-        run: scripts/build-pkg.sh
+        # --no-worktree: the runner's checkout is already the verified
+        # tag and can't move mid-build — the worktree anchor is for
+        # local signed builds.
+        run: scripts/build-pkg.sh --no-sign --no-worktree
 
       - name: Extract CHANGELOG notes
         env:
