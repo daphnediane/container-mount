@@ -33,7 +33,7 @@ use container_mount::dial::{self, APISERVER_REQUIREMENT};
 use container_mount::proto;
 use container_mount::servers::{self, Platform};
 
-use crate::fscli;
+use crate::{fscli, tree};
 use cli::{Base, Ref, Remote, Word};
 
 /// The plugin CLI contract's version — what container-distro checks,
@@ -62,8 +62,9 @@ usage: container mount [--dev] COMMAND [OPTIONS] [--] ARGS...
   ls [-l] TARGET[:PATH]          list a guest directory
   stat [-L] TARGET:PATH          one entry's attributes
   cat TARGET:PATH...             guest files to stdout
-  copy SRC DEST  (alias: cp)     host<->guest, within a guest
-                                 (server-side), or guest->guest
+  copy SRC DEST  (alias: cp)     files or directories: host<->guest,
+                                 within a guest (server-side), or
+                                 guest->guest
   list [--format json]           attached mounts
   help                           this text
 
@@ -301,7 +302,7 @@ fn cat(dev: bool, args: &[String]) -> Result<()> {
 
 /// `copy SRC DEST` — `container copy` semantics in every direction:
 /// into an existing directory keeps the source name, otherwise DEST is
-/// the new name. Directories are not copied yet.
+/// the new name; directories copy recursively (`tree`).
 fn copy(dev: bool, args: &[String]) -> Result<()> {
     // -r is accepted for scp/cp muscle memory.
     let o = options(args, &["-r", "-R", "--recursive"])?;
@@ -315,11 +316,11 @@ fn copy(dev: bool, args: &[String]) -> Result<()> {
         }
         (Ref::Local(from), Ref::Remote(to)) => {
             let (s, path) = sessions.get(&to)?;
-            fscli::put(&s.client, Path::new(&from), &path)
+            tree::copy_in(&s.client, Path::new(&from), &path)
         }
         (Ref::Remote(from), Ref::Local(to)) => {
             let (s, path) = sessions.get(&from)?;
-            fscli::get(&s.client, &path, Some(Path::new(&to)))
+            tree::copy_out(&s.client, &path, Path::new(&to))
         }
         // One guest as one user: a server-side copy, reflinked where
         // possible.
@@ -329,7 +330,7 @@ fn copy(dev: bool, args: &[String]) -> Result<()> {
         {
             let (s, from) = sessions.get(&a)?;
             let to = s.path(&b.path)?;
-            fscli::cp(&s.client, &from, &to)
+            tree::copy_within(&s.client, &from, &to)
         }
         // Two guests (or two users): through a private host staging
         // file, which keeps sparse files sparse on both legs.
@@ -344,9 +345,9 @@ fn copy(dev: bool, args: &[String]) -> Result<()> {
             let stage = engine::private_temp_dir()?;
             let staged = stage.join(name);
             let result = (|| {
-                fscli::get(&sessions.get(&a)?.0.client, &from, Some(&staged))?;
+                tree::copy_out(&sessions.get(&a)?.0.client, &from, &staged)?;
                 let (s, to) = sessions.get(&b)?;
-                fscli::put(&s.client, &staged, &to)
+                tree::copy_in(&s.client, &staged, &to)
             })();
             let _ = std::fs::remove_dir_all(&stage);
             result

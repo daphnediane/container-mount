@@ -12,6 +12,7 @@ getent
 Kata
 libc
 mangen
+mkfifo
 nologin
 nscd
 openpgp

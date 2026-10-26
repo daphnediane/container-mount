@@ -41,6 +41,18 @@ server, generates the token, and passes the client its arguments.
   copy once running, which narrows the window but doesn't close it.
   The risk is guest-internal (guest uid to guest root): everything
   that protects the host is in the client.
+- **Directory copies out keep only links that stay in the copied
+  tree.** Confinement to the guest root says nothing once a subtree
+  lands in `~/out`, where `../../etc/passwd` names a real host file. A
+  guest link is recreated on the host only if its target is relative
+  and canonical — every `..` before any name, no more of them than the
+  link is deep — so `..` only climbs real copied directories and every
+  name lands inside (a lexical check alone is fooled by `y -> .` then
+  `y/../etc`). Absolute and escaping links are skipped and listed.
+  Host files open `O_NOFOLLOW` and existing directories must be real
+  directories, so a planted host symlink is never written through;
+  setuid, setgid, and sticky bits are dropped. Copies *in* write guest
+  links verbatim — guest data, confined by the client on every read.
 - **`USER@`/`--user` pick a home and an owner, not permissions.** The
   plugin's user decides where relative paths land and who owns new
   files; the server still reads and writes as guest root, so

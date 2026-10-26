@@ -346,8 +346,14 @@ host to guest, guest to host, guest to the same guest as the same user
 (a server-side `Copy`, reflinked where possible), and guest to another
 guest or another user (two sessions, staged through a private host
 file, sparse-preserving). `container copy` rejects relative guest
-paths and guest-to-guest copies, so all of this extends it. Directory
-copies are not implemented yet.
+paths and guest-to-guest copies, so all of this extends it.
+Directories copy recursively in every direction (`tree.rs`, `cp -r`
+naming: an existing directory receives the source under its name);
+regular files, directories, and symlinks come along, devices, FIFOs,
+and sockets are skipped and reported. Copies *out* to the host keep a
+guest symlink only when its target can't leave the copied tree, never
+write through an existing host symlink, and drop setuid/setgid/sticky
+(security.md).
 
 **Users.** The user — `USER@` on the reference, else `--user`, else a
 machine's provisioned account (`userSetup` `uid:gid`), else the

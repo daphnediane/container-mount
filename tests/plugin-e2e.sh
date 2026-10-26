@@ -150,6 +150,58 @@ plugin copy "$TAG-alpine:/up.txt" "$TAG-amd64:/from-alpine.txt" \
     && plugin cat "$TAG-amd64:/from-alpine.txt" | grep -q "host-payload-$TAG-alpine" \
     && pass "guest-to-guest copy" || flunk "guest-to-guest copy"
 
+# Directory copies, every direction.
+A="$TAG-alpine"
+T="$SCRATCH/tree"
+mkdir -p "$T/sub/deep"
+echo top > "$T/top.txt"
+echo deep > "$T/sub/deep/d.txt"
+chmod 750 "$T/sub"
+ln -s ../top.txt "$T/sub/up-link"
+mkfifo "$T/fifo"
+# An existing directory receives the tree under its own name (cp -r).
+container exec "$A" mkdir -p /in
+plugin copy "$T" "$A:/in" 2>/dev/null \
+    && [ "$(container exec "$A" cat /in/tree/sub/deep/d.txt)" = deep ] \
+    && [ "$(container exec "$A" readlink /in/tree/sub/up-link)" = ../top.txt ] \
+    && [ "$(container exec "$A" stat -c %a /in/tree/sub)" = 750 ] \
+    && ! container exec "$A" test -e /in/tree/fifo \
+    && pass "dir copy in (files, links, modes; FIFO skipped)" || flunk "dir copy in"
+
+# Out: links that stay inside survive; escaping and absolute ones don't.
+container exec "$A" sh -c 'mkdir -p /out/a && echo hi > /out/a/f && chmod 4755 /out/a/f &&
+    ln -s ../a/f /out/a/inside && ln -s ../../etc/passwd /out/a/escape &&
+    ln -s /etc/hosts /out/a/absolute && ln -s . /out/y && ln -s y/../etc /out/z'
+mkdir -p "$SCRATCH/got"
+plugin copy "$A:/out" "$SCRATCH/got" 2>"$SCRATCH/out.err"
+G="$SCRATCH/got/out"
+[ "$(cat "$G/a/f")" = hi ] && [ -L "$G/a/inside" ] && [ "$(cat "$G/a/inside")" = hi ] \
+    && [ ! -e "$G/a/escape" ] && [ ! -L "$G/a/escape" ] && [ ! -L "$G/a/absolute" ] \
+    && [ -L "$G/y" ] && [ ! -L "$G/z" ] \
+    && grep -q "outside the copied tree" "$SCRATCH/out.err" \
+    && pass "dir copy out confines links" || flunk "dir copy out ($(cat "$SCRATCH/out.err"))"
+[ "$(stat -f %Lp "$G/a/f")" = 755 ] && pass "setuid dropped on the host" \
+    || flunk "setuid kept ($(stat -f %Lp "$G/a/f"))"
+
+# Never write through a host symlink at the destination (decoy target).
+mkdir -p "$SCRATCH/trap/out/a"
+echo decoy > "$SCRATCH/decoy"
+ln -s "$SCRATCH/decoy" "$SCRATCH/trap/out/a/f"
+plugin copy "$A:/out" "$SCRATCH/trap" >/dev/null 2>&1 \
+    && flunk "wrote through a host symlink" \
+    || { [ "$(cat "$SCRATCH/decoy")" = decoy ] && pass "host symlink not followed" \
+        || flunk "decoy changed"; }
+
+plugin copy "$A:/in/tree" "$A:/in/tree2" \
+    && [ "$(container exec "$A" cat /in/tree2/sub/deep/d.txt)" = deep ] \
+    && [ "$(container exec "$A" readlink /in/tree2/sub/up-link)" = ../top.txt ] \
+    && pass "dir copy within a guest" || flunk "dir copy within"
+plugin copy "$A:/in/tree" "$A:/in/tree/sub" >/dev/null 2>&1 \
+    && flunk "copied a directory into itself" || pass "self-nesting refused"
+plugin copy "$A:/in/tree" "$TAG-amd64:/from-alpine-tree" \
+    && [ "$(container exec "$TAG-amd64" cat /from-alpine-tree/sub/deep/d.txt)" = deep ] \
+    && pass "dir copy guest to guest" || flunk "dir copy guest to guest"
+
 # Dispatch rules.
 err="$(plugin lst "$TAG-alpine:" 2>&1 || true)"
 echo "$err" | grep -q 'did you mean `list` or `ls`' && pass "typo hint" || flunk "typo hint ($err)"

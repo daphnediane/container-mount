@@ -373,34 +373,22 @@ pub(crate) fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
             Some(File::create(&p).with_context(|| format!("failed to create {}", p.display()))?)
         }
     };
-    let fh = c.open(
-        r.node,
-        OpenFlags {
-            read: true,
-            ..OpenFlags::default()
-        },
-    )?;
-    let result = (|| -> Result<()> {
-        match file {
-            Some(mut f) => {
-                // Worth probing only when the guest reports fewer
-                // allocated blocks than the size implies.
-                if r.attr.blocks.saturating_mul(512) < r.attr.size && c.caps() & CAP_SEEK != 0 {
-                    match get_sparse(c, fh, r.attr.size, &mut f) {
-                        Err(e) if extents_unsupported(&e) => {}
-                        r => return r,
-                    }
-                }
-                pump_read(c, fh, &mut f)
-            }
-            None => {
-                let mut out = io::stdout().lock();
-                pump_read(c, fh, &mut out)?;
-                out.flush().map_err(Into::into)
-            }
-        }
-    })();
-    let _ = c.release(fh);
+    let result = match file {
+        Some(f) => download(c, r.node, &r.attr, f),
+        None => (|| -> Result<()> {
+            let fh = c.open(
+                r.node,
+                OpenFlags {
+                    read: true,
+                    ..OpenFlags::default()
+                },
+            )?;
+            let mut out = io::stdout().lock();
+            let r = pump_read(c, fh, &mut out).and_then(|()| out.flush().map_err(Into::into));
+            let _ = c.release(fh);
+            r
+        })(),
+    };
     // A closed reader (`… | head`) is a normal way to stop.
     let quiet_pipe = |e: &anyhow::Error| {
         e.downcast_ref::<io::Error>()
@@ -410,6 +398,31 @@ pub(crate) fn get(c: &Client, path: &str, dest: Option<&Path>) -> Result<()> {
         Err(e) if quiet_pipe(&e) => Ok(()),
         r => r,
     }
+}
+
+/// Copy guest file `node` (attributes `attr`) into `f`, keeping holes
+/// where the guest has them.
+pub(crate) fn download(c: &Client, node: NodeId, attr: &Attr, mut f: File) -> Result<()> {
+    let fh = c.open(
+        node,
+        OpenFlags {
+            read: true,
+            ..OpenFlags::default()
+        },
+    )?;
+    let result = (|| -> Result<()> {
+        // Worth probing only when the guest reports fewer allocated
+        // blocks than the size implies.
+        if attr.blocks.saturating_mul(512) < attr.size && c.caps() & CAP_SEEK != 0 {
+            match get_sparse(c, fh, attr.size, &mut f) {
+                Err(e) if extents_unsupported(&e) => {}
+                r => return r,
+            }
+        }
+        pump_read(c, fh, &mut f)
+    })();
+    let _ = c.release(fh);
+    result
 }
 
 /// Data extents of a local file via `SEEK_DATA`/`SEEK_HOLE` — `None`
@@ -533,9 +546,21 @@ pub(crate) fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
             (parent, base.as_bytes().to_vec())
         }
     };
+    upload(c, parent, &name, file.as_ref(), perm)
+}
+
+/// Create (or truncate) `name` under guest `parent` with `perm` and
+/// fill it from `src` — stdin when `None` — keeping holes.
+pub(crate) fn upload(
+    c: &Client,
+    parent: NodeId,
+    name: &[u8],
+    src: Option<&File>,
+    perm: u32,
+) -> Result<()> {
     let (node, _, fh) = c.create(
         parent,
-        &name,
+        name,
         perm,
         false,
         OpenFlags {
@@ -545,7 +570,7 @@ pub(crate) fn put(c: &Client, src: &Path, path: &str) -> Result<()> {
         },
     )?;
     let result = (|| -> Result<()> {
-        match &file {
+        match src {
             None => pump_write(c, fh, &mut io::stdin().lock())?,
             Some(f) => {
                 let m = f.metadata()?;

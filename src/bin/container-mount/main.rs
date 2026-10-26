@@ -20,6 +20,8 @@ mod fscli;
 mod plugin;
 mod serve;
 mod table;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod tree;
 mod update;
 
 // Portable (and unit-tested on the host); only the Linux server uses it.
