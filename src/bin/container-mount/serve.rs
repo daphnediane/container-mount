@@ -33,9 +33,12 @@ pub enum Listen {
 /// Options for `serve`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServeArgs {
-    /// Owner given to files and directories the host creates.
-    pub uid: u32,
-    pub gid: u32,
+    /// Owner given to files and directories the host creates: `--user`
+    /// resolved in the guest, then `--uid`/`--gid` overriding either
+    /// half; root when neither is given.
+    pub user: Option<String>,
+    pub uid: Option<u32>,
+    pub gid: Option<u32>,
     pub listen: Listen,
     /// Exit after this long with no connected client.
     pub idle: Duration,
@@ -51,15 +54,16 @@ pub struct ServeArgs {
     pub token_env: String,
 }
 
-const USAGE: &str = "usage: container-mount serve [--uid UID] [--gid GID] \
+const USAGE: &str = "usage: container-mount serve [--user NAME|UID[:GID]] [--uid UID] [--gid GID] \
      [--socket PATH | --listen unix:PATH | --listen tcp:ADDR | --listen vsock:PORT] \
      [--idle-secs N] [--once] [--remove-binary] [--token-env NAME]";
 
 pub fn parse(args: &[String]) -> Result<ServeArgs> {
     let socket_env = std::env::var_os(proto::SOCKET_ENV).map(PathBuf::from);
     let mut out = ServeArgs {
-        uid: 0,
-        gid: 0,
+        user: None,
+        uid: None,
+        gid: None,
         listen: Listen::Unix(socket_env.unwrap_or_else(|| PathBuf::from(proto::DEFAULT_SOCKET))),
         idle: Duration::from_secs(30),
         once: false,
@@ -71,8 +75,9 @@ pub fn parse(args: &[String]) -> Result<ServeArgs> {
     while let Some(flag) = it.next() {
         let mut value = || it.next().with_context(|| format!("{flag} needs a value"));
         match flag.as_str() {
-            "--uid" => out.uid = num(flag, value()?)?,
-            "--gid" => out.gid = num(flag, value()?)?,
+            "--user" => out.user = Some(value()?.clone()),
+            "--uid" => out.uid = Some(num(flag, value()?)?),
+            "--gid" => out.gid = Some(num(flag, value()?)?),
             "--idle-secs" => out.idle = Duration::from_secs(num(flag, value()?)?.into()),
             "--once" => out.once = true,
             "--remove-binary" => out.remove_binary = true,
@@ -151,7 +156,13 @@ mod tests {
             "5",
         ]))
         .unwrap();
-        assert_eq!((a.uid, a.gid, a.idle), (501, 20, Duration::from_secs(5)));
+        assert_eq!(
+            (a.uid, a.gid, a.idle),
+            (Some(501), Some(20), Duration::from_secs(5))
+        );
+        assert_eq!(a.user, None);
+        let w = parse(&v(&["--user", "daphne:staff"])).unwrap();
+        assert_eq!((w.user.as_deref(), w.uid), (Some("daphne:staff"), None));
         assert_eq!(a.listen, Listen::Unix(PathBuf::from("/x.sock")));
         let t = parse(&v(&["--listen", "tcp:0.0.0.0:9999"])).unwrap();
         assert_eq!(t.listen, Listen::Tcp("0.0.0.0:9999".into()));

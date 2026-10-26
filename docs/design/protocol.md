@@ -122,7 +122,23 @@ struct once shipped, so a new field on `Attr`/`SetAttr`/`StatFs`/
 | `CAP_FALLOCATE` | `Fallocate`                                        |
 | `CAP_DIR_SYNC`  | `FsyncDir`, `SyncFs`                               |
 | `CAP_XATTR`     | `GetXattr`, `ListXattr`, `SetXattr`, `RemoveXattr` |
+| `CAP_USERS`     | `LookupUser` (protocol 3)                          |
 | `CAP_EVENTS`    | `Event` pushes (planned)                           |
+
+**Users.** `LookupUser { user }` resolves `NAME|UID[:GID]` (at most
+256 bytes) in the guest and answers `User { uid, gid, home }`, read
+live each time. The server tries libc's `getpwnam_r`/`getpwuid_r`/`getgrnam_r` first
+(on musl: the guest's `/etc/passwd` and `/etc/group` plus nscd, the
+`getent` half of container-distro's lookup), then those files read
+through its confined, no-follow lookups on served filesystems only.
+The rules on top are in `src/users.rs`: a listed name or uid takes its
+entry; `root`/uid 0 without one is `0:0` with home `/root`; an
+unlisted uid gets gid 0 and home `/`; an unknown name is `ENOENT`; a
+malformed spec is `EINVAL`. `home` is guest data — the client
+requires it absolute and NUL-free, then resolves it like any path.
+`serve --user SPEC` resolves the same way at startup and makes the
+result the owner of host-created files (`--uid`/`--gid` override
+either half).
 
 **Copying.** `Copy` is whole-file (`clonefileat` semantics): an
 exclusive create under `dst_parent` (`EEXIST` if taken), mode/times
@@ -195,7 +211,7 @@ if FSKit surfaces them.
 present the whole rootfs. It reports real ownership and modes; the
 *host kernel* enforces them against the calling user. Files and
 directories created from the host are `fchown`ed to the provisioned
-user when the caller supplies one.
+user when the caller supplies one (`serve --user`, or `--uid`/`--gid`).
 
 **Mount crossing.** The server runs in the container's mount
 namespace, so it also sees virtiofs shares and pseudo filesystems. It

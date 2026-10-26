@@ -22,3 +22,4 @@ pub mod proto;
 pub mod release;
 pub mod servers;
 pub mod symlink;
+pub mod users;

@@ -32,6 +32,8 @@ use std::time::{Duration, Instant};
 use container_mount::connect::Stream;
 use container_mount::proto::*;
 
+use container_mount::users;
+
 use crate::mounts;
 use crate::serve::{Listen, ServeArgs};
 
@@ -320,6 +322,62 @@ impl Shared {
         mounts::Table::parse(&fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
     }
 
+    /// `spec` resolved against the guest's `/etc/passwd` and
+    /// `/etc/group`, read fresh each time.
+    fn lookup_user(&self, spec: &[u8]) -> R<users::User> {
+        if spec.len() > USER_SPEC_MAX || spec.contains(&0) {
+            return Err(Errno::EINVAL);
+        }
+        let (passwd, group) = (self.read_etc(c"passwd"), self.read_etc(c"group"));
+        let files = users::Files {
+            passwd: &passwd,
+            group: &group,
+        };
+        // libc first, like container-distro's `getent … || cat`.
+        users::resolve(spec, &(Libc, files)).map_err(|e| match e {
+            users::Error::Malformed => Errno::EINVAL,
+            users::Error::UnknownUser | users::Error::UnknownGroup => Errno::ENOENT,
+        })
+    }
+
+    /// `/etc/<name>` from the guest root, through the same no-follow,
+    /// served-filesystem rules as every other lookup — a symlinked
+    /// `/etc` or file, a host share, or anything but a small regular
+    /// file reads as absent (empty), and resolution falls back.
+    fn read_etc(&self, name: &CStr) -> Vec<u8> {
+        const MAX: u64 = 4 << 20;
+        let read = || -> R<Vec<u8>> {
+            let root = openat(libc::AT_FDCWD, c"/", libc::O_PATH | libc::O_DIRECTORY, 0)?;
+            let etc = openat(
+                root.as_raw_fd(),
+                c"etc",
+                libc::O_PATH | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+                0,
+            )?;
+            let fd = openat(
+                etc.as_raw_fd(),
+                name,
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NOCTTY | libc::O_NONBLOCK,
+                0,
+            )?;
+            let st = fstat(fd.as_raw_fd())?;
+            if FileKind::from_mode(st.st_mode) != Some(FileKind::File)
+                || st.st_size as u64 > MAX
+                || !self.served(st.st_dev as u64)
+            {
+                return Err(Errno::ENOENT);
+            }
+            let mut buf = Vec::new();
+            use std::io::Read;
+            File::from(fd)
+                .take(MAX)
+                .read_to_end(&mut buf)
+                .map_err(|e| io_errno(&e))?;
+            Ok(buf)
+        };
+        read().unwrap_or_default()
+    }
+
     /// Whether the filesystem on `dev` is served; mountinfo is re-read
     /// once for a device it hasn't seen (mounts change at run time).
     fn served(&self, dev: u64) -> bool {
@@ -334,6 +392,82 @@ impl Shared {
             *t = Self::load_mounts();
         }
         t.fstype(maj, min).is_some_and(mounts::served)
+    }
+}
+
+/// libc's passwd/group lookups — on musl, the guest's `/etc/passwd`
+/// and `/etc/group` by path plus an nscd daemon when one runs. Ahead of
+/// [`users::Files`], which covers what this misses.
+struct Libc;
+
+impl users::Db for Libc {
+    fn by_name(&self, name: &[u8]) -> Option<users::Entry> {
+        let name = CString::new(name).ok()?;
+        // SAFETY: every pointer comes from `passwd_lookup` and outlives the call.
+        passwd_lookup(|pw, buf, len, out| unsafe {
+            libc::getpwnam_r(name.as_ptr(), pw, buf, len, out)
+        })
+    }
+
+    fn by_uid(&self, uid: u32) -> Option<users::Entry> {
+        // SAFETY: every pointer comes from `passwd_lookup` and outlives the call.
+        passwd_lookup(|pw, buf, len, out| unsafe { libc::getpwuid_r(uid, pw, buf, len, out) })
+    }
+
+    fn group(&self, name: &[u8]) -> Option<u32> {
+        let name = CString::new(name).ok()?;
+        let mut len = 1024;
+        loop {
+            let mut buf = vec![0 as libc::c_char; len];
+            // SAFETY: `group` is plain data; zeroed is a valid start.
+            let mut gr: libc::group = unsafe { std::mem::zeroed() };
+            let mut out = std::ptr::null_mut();
+            // SAFETY: `buf` is writable for `len` bytes; `gr`/`out` are live.
+            let rc = unsafe {
+                libc::getgrnam_r(name.as_ptr(), &mut gr, buf.as_mut_ptr(), len, &mut out)
+            };
+            if rc == libc::ERANGE && len < PASSWD_BUF_MAX {
+                len *= 4;
+                continue;
+            }
+            return (rc == 0 && !out.is_null()).then_some(gr.gr_gid);
+        }
+    }
+}
+
+/// Cap on the lookup scratch buffer (it grows on `ERANGE`).
+const PASSWD_BUF_MAX: usize = 1 << 20;
+
+/// Run `getpwnam_r`/`getpwuid_r` with a growing buffer; the entry it
+/// found.
+fn passwd_lookup(
+    call: impl Fn(*mut libc::passwd, *mut libc::c_char, usize, *mut *mut libc::passwd) -> libc::c_int,
+) -> Option<users::Entry> {
+    let mut len = 1024;
+    loop {
+        let mut buf = vec![0 as libc::c_char; len];
+        // SAFETY: `passwd` is plain data; zeroed is a valid start.
+        let mut pw: libc::passwd = unsafe { std::mem::zeroed() };
+        let mut out = std::ptr::null_mut();
+        let rc = call(&mut pw, buf.as_mut_ptr(), len, &mut out);
+        if rc == libc::ERANGE && len < PASSWD_BUF_MAX {
+            len *= 4;
+            continue;
+        }
+        if rc != 0 || out.is_null() {
+            return None;
+        }
+        let home = if pw.pw_dir.is_null() {
+            Vec::new()
+        } else {
+            // SAFETY: on success pw_dir points into `buf`, NUL-terminated.
+            unsafe { CStr::from_ptr(pw.pw_dir) }.to_bytes().to_vec()
+        };
+        return Some(users::Entry {
+            uid: pw.pw_uid,
+            gid: pw.pw_gid,
+            home,
+        });
     }
 }
 
@@ -823,6 +957,14 @@ impl Conn {
                 cvt(unsafe { libc::fremovexattr(f.as_raw_fd(), xattr_name(&name)?.as_ptr()) })?;
                 Ok(Reply::Ok)
             }
+            Op::LookupUser { user } => {
+                let u = self.shared.lookup_user(&user)?;
+                Ok(Reply::User {
+                    uid: u.uid,
+                    gid: u.gid,
+                    home: u.home,
+                })
+            }
         }
     }
 
@@ -1289,7 +1431,7 @@ fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<bool>
         &mut s,
         &ServerAuth {
             mac: server_mac(token, &auth.nonce),
-            caps: CAP_XATTR | CAP_COPY | CAP_SEEK | CAP_FALLOCATE | CAP_DIR_SYNC,
+            caps: CAP_XATTR | CAP_COPY | CAP_SEEK | CAP_FALLOCATE | CAP_DIR_SYNC | CAP_USERS,
             root,
         },
     )?;
@@ -1347,10 +1489,27 @@ pub fn serve(args: &ServeArgs) -> io::Result<()> {
     if args.remove_binary {
         remove_own_binary();
     }
-    let shared = Arc::new(Shared {
-        uid: args.uid,
-        gid: args.gid,
+    // The owner for host-created files: `--user` resolved by the guest's
+    // own rules, then `--uid`/`--gid` overriding either half.
+    let probe = Shared {
+        uid: 0,
+        gid: 0,
         mounts: Mutex::new(Shared::load_mounts()),
+    };
+    let (mut uid, mut gid) = (0, 0);
+    if let Some(spec) = &args.user {
+        let u = probe.lookup_user(spec.as_bytes()).map_err(|e| {
+            io::Error::other(format!(
+                "--user {spec}: {}",
+                io::Error::from_raw_os_error(e.0)
+            ))
+        })?;
+        (uid, gid) = (u.uid, u.gid);
+    }
+    let shared = Arc::new(Shared {
+        uid: args.uid.unwrap_or(uid),
+        gid: args.gid.unwrap_or(gid),
+        mounts: probe.mounts,
     });
     let active = Arc::new(AtomicUsize::new(0));
     let last = Arc::new(Mutex::new(Instant::now()));

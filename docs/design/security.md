@@ -91,6 +91,12 @@ it:
   from the environment and cleared before serving; it never appears on
   a command line. The plugin uses a per-command name because `container
   exec -e` can't override a variable the target already defines.
+- User lookups (`LookupUser`, `serve --user`) only ever pick guest ids
+  and a guest path. libc's lookups follow `/etc/passwd` as the guest
+  itself would; the fallback reads `/etc/passwd` and `/etc/group` by
+  no-follow `openat` on served filesystems only, capped at 4 MiB. The
+  host never trusts the returned home beyond "an absolute guest path"
+  and resolves it through the usual confinement.
 - vsock listeners (`--listen vsock:`) use ports below 1024, which need
   `CAP_NET_BIND_SERVICE` — unprivileged guest processes can't squat
   them. `--once` exits only after an *authenticated* session ends, so

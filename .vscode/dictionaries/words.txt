@@ -64,6 +64,7 @@ EOPNOTSUPP
 EOVERFLOW
 EPERM
 EPROTO
+ERANGE
 EROFS
 errnos
 esac
@@ -104,12 +105,16 @@ fstype
 fstypename
 fsyncs
 ftruncate
+gecos
 getattr
 getattrlist
 getegid
 getenv
 geteuid
 getfsstat
+getgrnam_r
+getpwnam_r
+getpwuid_r
 getsockopt
 getuid
 getvfsstat

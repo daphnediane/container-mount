@@ -170,6 +170,29 @@ out="$(cli stat /sub/escape-link)"
 echo "$out" | grep -q 'target: ../etc/hostname' \
     && log "PASS escape-link clamped at root" || { log "FAIL escape-link ($out)"; fail=1; }
 
+# User resolution by the guest's own passwd/group (libc, then files).
+# cspell:ignore nosuchuser
+guest 'adduser -D -u 1031 -h /srv/tester tester 2>/dev/null || true'
+out="$(cli user tester)"
+[ "$out" = "uid=1031 gid=1031 home=/srv/tester" ] \
+    && log "PASS user by name" || { log "FAIL user by name ($out)"; fail=1; }
+out="$(cli user 1031:0)"
+[ "$out" = "uid=1031 gid=0 home=/srv/tester" ] \
+    && log "PASS user by uid with gid" || { log "FAIL user by uid ($out)"; fail=1; }
+out="$(cli user 4242)"
+[ "$out" = "uid=4242 gid=0 home=/" ] \
+    && log "PASS unlisted uid" || { log "FAIL unlisted uid ($out)"; fail=1; }
+cli user nosuchuser >/dev/null 2>&1 \
+    && { log "FAIL unknown name resolved"; fail=1; } || log "PASS unknown name refused"
+
+# A symlinked /etc/passwd isn't read through by the confined fallback;
+# libc still follows it inside the guest, which is the guest's own view.
+guest 'cp /etc/passwd /passwd.real && rm /etc/passwd && ln -s /passwd.real /etc/passwd'
+out="$(cli user tester)"
+[ "$out" = "uid=1031 gid=1031 home=/srv/tester" ] \
+    && log "PASS symlinked passwd via libc" || { log "FAIL symlinked passwd ($out)"; fail=1; }
+guest 'rm /etc/passwd && mv /passwd.real /etc/passwd'
+
 # A wrong token must never handshake.
 if CONTAINER_MOUNT_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
     "$CLIENT" --timeout 3 "${CLIENT_ARGS[@]}" check >/dev/null 2>&1; then

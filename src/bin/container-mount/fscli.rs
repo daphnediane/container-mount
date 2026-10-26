@@ -49,6 +49,19 @@ pub fn run(cmd: &str, args: &[String], c: &Client, via: &str, peer_verified: boo
             _ => bail!("usage: container-mount cp SRC PATH"),
         },
         "check" => check(c, via, peer_verified),
+        "user" => match args {
+            [spec] => {
+                let u = c.lookup_user(spec.as_bytes())?;
+                println!(
+                    "uid={} gid={} home={}",
+                    u.uid,
+                    u.gid,
+                    String::from_utf8_lossy(&u.home)
+                );
+                Ok(())
+            }
+            _ => bail!("usage: container-mount user NAME|UID[:GID]"),
+        },
         _ => bail!("unknown command `{cmd}`"),
     }
 }

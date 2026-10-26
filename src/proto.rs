@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Protocol major version; peers reject any other.
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 /// First bytes of [`ServerHello`] — rejects non-container-mount listeners early.
 pub const MAGIC: [u8; 15] = *b"container-mount";
 /// Upper bound on one frame's payload, checked before allocating.
@@ -96,6 +96,10 @@ pub const CAP_SEEK: u64 = 1 << 3;
 pub const CAP_FALLOCATE: u64 = 1 << 4;
 /// `ServerAuth.caps` bit: `FsyncDir` and `SyncFs` are implemented.
 pub const CAP_DIR_SYNC: u64 = 1 << 5;
+/// `ServerAuth.caps` bit: `LookupUser` is implemented.
+pub const CAP_USERS: u64 = 1 << 6;
+/// Longest `LookupUser` spec (`NAME|UID[:GID]`) either side accepts.
+pub const USER_SPEC_MAX: usize = 256;
 
 pub type NodeId = u64;
 pub type FileHandle = u64;
@@ -431,6 +435,13 @@ pub enum Op {
         node: NodeId,
         name: Vec<u8>,
     },
+    /// Resolve `NAME|UID[:GID]` against the guest's own `/etc/passwd`
+    /// and `/etc/group` ([`crate::users`] rules). Read live, never
+    /// cached; `ENOENT` for an unknown name, `EINVAL` for a malformed
+    /// spec.
+    LookupUser {
+        user: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -475,6 +486,12 @@ pub enum Reply {
     Value(Vec<u8>),
     /// `ListXattr` result.
     Names(Vec<Vec<u8>>),
+    /// `LookupUser` result; `home` is guest data like any path.
+    User {
+        uid: u32,
+        gid: u32,
+        home: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -43,11 +43,11 @@ use container_mount::proto;
 static VERSION_STAMP: &[u8] = concat!(
     "container-mount-version:",
     env!("CARGO_PKG_VERSION"),
-    ":protocol:2\0"
+    ":protocol:3\0"
 )
 .as_bytes();
 const _: () = assert!(
-    proto::VERSION == 2,
+    proto::VERSION == 3,
     "bump the stamp's protocol digits with proto::VERSION"
 );
 
@@ -63,6 +63,7 @@ usage: container-mount [--dev] [--timeout SECS]
   put        copy a host file in (SRC `-` reads stdin)
   cp         copy a guest file inside the guest (reflink when possible)
   check      verify transport, peer, and the session handshake
+  user SPEC  resolve NAME|UID[:GID] by the guest's own passwd/group
   socket-path KEY   print a managed private host socket path for KEY
   servers    list known guest server binaries (-v shows search paths)
   server-path --triple T [--fetch]   path of the server for T (a target
@@ -245,7 +246,7 @@ fn real_main() -> Result<()> {
                     .collect::<Vec<_>>(),
             )
         }
-        "ls" | "stat" | "get" | "put" | "cp" | "check" => {
+        "ls" | "stat" | "get" | "put" | "cp" | "check" | "user" => {
             let (c, via) = connect_client(&o)?;
             fscli::run(cmd, &rest[1..], &c, &via, o.peer_requirement.is_some())
         }

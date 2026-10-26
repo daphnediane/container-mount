@@ -331,7 +331,7 @@ mod tests {
         // can come first (seen in release macOS builds).
         // cspell:ignore mountlibexec
         let shadowed =
-            b"container-mount-version:container-mountlibexec\0..container-mount-version:0.1.0:protocol:2\0";
-        assert_eq!(scan_stamp(shadowed), Some(("0.1.0".to_string(), Some(2))));
+            b"container-mount-version:container-mountlibexec\0..container-mount-version:0.1.0:protocol:3\0";
+        assert_eq!(scan_stamp(shadowed), Some(("0.1.0".to_string(), Some(3))));
     }
 }

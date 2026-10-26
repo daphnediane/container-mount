@@ -105,6 +105,7 @@ fn reply_name(r: &Reply) -> &'static str {
         Reply::CopiedRange { .. } => "CopiedRange",
         Reply::Value(_) => "Value",
         Reply::Names(_) => "Names",
+        Reply::User { .. } => "User",
     }
 }
 
@@ -668,6 +669,28 @@ impl Client {
             name: name.to_vec(),
         })
         .map(drop)
+    }
+
+    /// Resolve `user` (`NAME|UID[:GID]`) by the guest's own passwd and
+    /// group files. The home comes back as guest data: it must be an
+    /// absolute, NUL-free path within the target limit, and is resolved
+    /// through [`Client::resolve`] like any other path before use.
+    pub fn lookup_user(&self, user: &[u8]) -> Result<crate::users::User> {
+        if user.is_empty() || user.len() > USER_SPEC_MAX || user.contains(&0) {
+            return Err(Error::Guest(Errno::EINVAL));
+        }
+        self.need(CAP_USERS)?;
+        match self.call(Op::LookupUser {
+            user: user.to_vec(),
+        })? {
+            Reply::User { uid, gid, home }
+                if home.starts_with(b"/") && home.len() <= TARGET_MAX && !home.contains(&0) =>
+            {
+                Ok(crate::users::User { uid, gid, home })
+            }
+            Reply::User { .. } => Err(protocol("malformed home directory")),
+            r => Err(unexpected(&r)),
+        }
     }
 
     /// Resolve a guest path from the root, component by component.

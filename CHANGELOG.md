@@ -47,6 +47,11 @@ and audited against the commit log.
   `container` releases outside the verified range
   (`docs/design/container-internals.md`). `tests/plugin-e2e.sh` covers
   alpine, amd64, `FROM scratch`, and machine targets.
+- Guest user resolution (protocol 3): `LookupUser` and `serve --user
+  NAME|UID[:GID]` map a user to uid, gid, and home by the guest's own
+  rules — libc first, then its `/etc/passwd`/`/etc/group` read through
+  the confined lookups — and `serve --user` owns host-created files as
+  that user. `container-mount user SPEC` shows a resolution.
 - `update` on a pkg install ([#2]) downloads the signed `.pkg`,
   checks its signature and installer team, and hands it to
   Installer.app; other installs keep the tarball swap.
