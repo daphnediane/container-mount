@@ -6,9 +6,12 @@ decided: a **macOS Installer `.pkg`** plus a **`cargo-binstall`-compatible
 client tarball** and a **guest-server bundle** attached to each GitHub
 Release by `.github/workflows/release.yml`, alongside
 `THIRD-PARTY-NOTICES.yaml` and a CycloneDX SBOM when
-`cargo-cyclonedx` is present. `cargo install` from a checkout is the
-baseline path; crates.io publishing is a 1.0-milestone decision
-([work item](../work/packaging/1.0/crates-io-publishing.md)).
+`cargo-cyclonedx` is present. The crate is on crates.io too (from
+0.1.0, published by hand from each tag): `cargo install
+container-mount` builds it, `cargo binstall container-mount` takes the
+release tarball, and either follows with `install-all` for servers and
+the plugin. What a 1.0 crate promises is a [work
+item](../work/packaging/1.0/crates-io-publishing.md).
 
 ## Assets
 

@@ -55,6 +55,18 @@ know the wire protocol.
 - `src/bin/container-mount/` — the binary: `serve`, the fs commands, and
   `servers`/`server-path`/`fetch-servers`/`update`
 
+## Installing
+
+The macOS `.pkg` on each [GitHub
+Release](https://github.com/daphnediane/container-mount/releases)
+installs everything (binary, servers, plugin). From crates.io:
+
+```bash
+cargo binstall container-mount   # the signed release tarball, or
+cargo install container-mount    # build it
+container-mount install-all      # this release's servers + the plugin
+```
+
 ## Server binaries
 
 Releases ship `container-mount-servers-<ver>.tar.gz` with static musl builds

@@ -33,8 +33,11 @@ Checklist for a minor release from `main`.
    (verifies the signatures, uploads the signed pkg + tarball +
    `.sig`/`.asc`, deletes the `-unsigned` assets) before publishing
    the draft.
-6. crates.io publish stays manual until the crate is meant to be
-   published there.
+6. After the GitHub Release is public, publish to crates.io from a
+   clean worktree of the tag (`git worktree add --detach
+   scratch/publish vX.Y.Z`, then `cargo publish --dry-run && cargo
+   publish` inside it, then remove the worktree) — manual on purpose,
+   since an upload can't be undone.
 7. Open the next cycle: `cargo release version X.Y.0-dev -x
    --no-confirm`, start a fresh empty `## X.Y.0-dev` section atop
    `CHANGELOG.md`, commit, push.

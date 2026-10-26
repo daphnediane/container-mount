@@ -21,7 +21,7 @@ The non-issue 1.0 gates (naming, GPG, the final security review) are
 in [milestone-1.0.md](../milestone-1.0.md).
 
 - [packaging/1.0/crates-io-publishing.md](packaging/1.0/crates-io-publishing.md)
-  — decide crates.io publishing ([#1])
+  — what a 1.0 crate promises (published since 0.1.0) ([#1])
 - [packaging/1.0/packaged-feature.md](packaging/1.0/packaged-feature.md)
   — `packaged` cargo feature + per-user servers dir ([#4])
 - [cli/1.0/clap-man-pages.md](cli/1.0/clap-man-pages.md) — `clap`

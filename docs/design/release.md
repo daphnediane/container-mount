@@ -69,9 +69,19 @@ process](https://github.com/daphnediane/container-distro/blob/main/docs/design/r
 
    Review the draft and publish (`gh release edit vX.Y.Z
    --draft=false`).
-7. crates.io publish is deferred — see [work]; until decided, install
-   paths are the pkg, binstall tarball, `cargo install --path`, and
-   `container-mount update`/`fetch-servers`.
+7. Publish to crates.io from a clean worktree of the tag, after the
+   GitHub Release is public (a crates.io install fetches its servers
+   from it):
+
+   ```bash
+   git worktree add --detach scratch/publish vX.Y.Z
+   (cd scratch/publish && cargo publish --dry-run && cargo publish)
+   git worktree remove scratch/publish
+   ```
+
+   `cargo release` keeps `publish = false`: the upload can't be undone,
+   so it stays a deliberate step. 0.x releases carry no stability
+   promise beyond semver's; the 1.0 commitment is [work]'s item.
 8. Close the issues the release resolves, naming `vX.Y.Z` in each
    comment.
 9. Re-open development on `main`:
