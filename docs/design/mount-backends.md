@@ -261,6 +261,62 @@ container-distro passes in:
 | never-booted container       | image snapshot `snapshots/<digest>/snapshot` |
 | image (`podman image mount`) | image snapshot, as above                     |
 
+### Lifecycle: mounts across start and stop (undecided)
+
+Mounting something that isn't running is the easy half; what happens
+when its state *changes* under a mount is not settled. Where the plugin
+owns the lifecycle it can coordinate; where upstream does, it can only
+notice afterwards.
+
+**Concerns**
+
+- **Start under a stopped-target mount.** A snapshot mount survives a
+  `start` but silently diverges from the live system. An exclusive
+  (read-write) mount must never coexist with a start: two kernels
+  writing one ext4 corrupts it. container-distro owns `distro start`,
+  so it can refuse or hand off first; `container start` and `container
+  machine start` consult nobody — there is no plugin hook and no disk
+  lease in the apiserver, so for plain containers and machines the
+  plugin can at best detect a start after the fact.
+- **Stop under a live mount.** The server dies with the VM and every
+  open file errors. Options: detach, fail with `EIO` until detached, or
+  re-back the mount with a snapshot of the now-stopped disk — which
+  turns a writable mount read-only underneath its users.
+- **Hand-off between the two.** A single logical mount whose backing
+  switches (live server ↔ helper VM) needs someone to sequence it:
+  container-distro can (stop → flush → re-attach exclusive; detach →
+  start), plain containers and machines need detection — polling
+  `container ls`, or an upstream state-change event if one appears.
+- **Writes to stopped containers and machines.** Their disks are
+  upstream-owned state (`containers/<id>/rootfs.ext4`, machine
+  `plugin-state`). Without a lease, read-only snapshots are the only
+  safe default; read-write would rest on the user's promise.
+- **Staleness.** A snapshot taken from a running container is
+  crash-consistent and dated the moment it's taken; the UI should say
+  so and offer a refresh, not pretend to be live.
+- **Helper VM cost and cleanup.** Each stopped-target mount is a VM
+  (memory, a vsock, a container record). Something long-lived (the
+  FSKit agent) owns it; helpers must be labeled so a crashed owner's
+  leftovers can be found and pruned.
+
+**Open decisions**
+
+1. Which stopped targets the first version covers — images and
+   never-booted containers (immutable, snapshot only) are the easy
+   start; stopped containers and machines read-only next.
+2. What a live mount does when its target stops: detach, `EIO`, or
+   fall back to a read-only snapshot.
+3. Whether `attach` ever writes to a stopped plain container or
+   machine, and if so what guards a concurrent `start`.
+4. The container-distro hand-off: who calls what in which order, a
+   shared lock (advisory `flock` on the disk, or `list --format json`
+   alone), and which fields `list` reports.
+5. How the plugin notices start/stop of targets it doesn't control:
+   polling, an upstream event stream, or not at all.
+6. Helper VM ownership, labeling, and `prune`.
+7. Whether to ask upstream for a disk lease or plugin start hooks,
+   which would turn detection into prevention.
+
 ## Choosing per target
 
 | Target                 | State   | Primary                     | Fallback            |
@@ -330,9 +386,13 @@ first; `--` ends option *and* verb recognition, so the next word is a
 TARGET whatever it spells; otherwise a reserved verb is a subcommand
 and anything else is the TARGET of an implied `attach`. A word one
 edit from a verb is refused with "did you mean" rather than looked up.
-Reserved now, not yet implemented: `attach detach inspect prune mv rm
-mkdir rmdir ln touch chmod chown du df find sync export import edit
-open events prepare`. The implied form is interactive shorthand:
+Reserved now, not yet implemented: `attach detach inspect prune
+snapshot mv rm mkdir rmdir ln touch chmod chown xattr du df find sync
+export import edit open events prepare`. `xattr` follows macOS's own
+`xattr` tool (`-l`, `-p`, `-w`, `-d`) over the protocol's xattr ops;
+SELinux labels are the `security.selinux` attribute, so `chcon` is not
+a separate verb. `snapshot` is held for whatever the stopped-target
+design settles on (a dated read-only clone to attach or copy from). The implied form is interactive shorthand:
 scripts and container-distro always name the verb and use `--`, so a
 verb added later can't capture a container of that name for them.
 
@@ -533,7 +593,11 @@ The first plugin slice is in `src/bin/container-mount/plugin/` and
 `src/dial.rs`; the upstream internals it relies on, and its version
 gate, are in [container-internals.md](container-internals.md).
 
-No GitHub issues are filed for these yet.
+Open plugin work is tracked as issues — the token hand-off ([#19]),
+`attach`/`detach` ([#20]), stopped targets and their lifecycle
+([#21]), `prepare` ([#22]), the `open` session ([#23]), the remaining
+verbs ([#24]), opt-in permission checks ([#25]), and a `--dev`
+apiserver requirement ([#26]) — each with a `docs/work/` item.
 
 ## Open questions
 
@@ -560,3 +624,11 @@ No GitHub issues are filed for these yet.
 [integration levels]: https://github.com/daphnediane/container-distro/blob/main/docs/design/lower-level-integration.md
 [podman-mount(1)]: https://docs.podman.io/en/latest/markdown/podman-mount.1.html
 [#11]: https://github.com/daphnediane/container-mount/issues/11
+[#19]: https://github.com/daphnediane/container-mount/issues/19
+[#20]: https://github.com/daphnediane/container-mount/issues/20
+[#21]: https://github.com/daphnediane/container-mount/issues/21
+[#22]: https://github.com/daphnediane/container-mount/issues/22
+[#23]: https://github.com/daphnediane/container-mount/issues/23
+[#24]: https://github.com/daphnediane/container-mount/issues/24
+[#25]: https://github.com/daphnediane/container-mount/issues/25
+[#26]: https://github.com/daphnediane/container-mount/issues/26

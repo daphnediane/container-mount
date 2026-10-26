@@ -3,6 +3,7 @@ binstall
 buildah
 buildkit
 byteorder
+chcon
 clippy
 cyclonedx
 dotgraphs

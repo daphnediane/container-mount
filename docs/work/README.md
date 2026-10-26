@@ -29,16 +29,27 @@ in [milestone-1.0.md](../milestone-1.0.md).
 - [protocol/1.0/wire-contract.md](protocol/1.0/wire-contract.md) —
   normative protocol contract doc ([#6])
 
+### Before 0.1.0 (no milestone)
+
+- plugin/ — [token-handoff](plugin/future/token-handoff.md) ([#19])
+
 ### `future` (no milestone)
 
+- plugin/ — [prepare](plugin/future/prepare.md) ([#22]),
+  [open-session](plugin/future/open-session.md) ([#23]),
+  [file-verbs](plugin/future/file-verbs.md) ([#24]),
+  [dev-apiserver-requirement](plugin/future/dev-apiserver-requirement.md)
+  ([#26])
 - fskit/ — [fskit-front-end](fskit/future/fskit-front-end.md) ([#7]),
   [inotify-invalidation](fskit/future/inotify-invalidation.md) ([#8])
 - server/ — [later-capabilities](server/future/later-capabilities.md)
   ([#9]), [stdio-transport](server/future/stdio-transport.md) ([#11]),
   [serve-root](server/future/serve-root.md) ([#12]),
-  [serve-ports](server/future/serve-ports.md) ([#13])
+  [serve-ports](server/future/serve-ports.md) ([#13]),
+  [permission-checks](server/future/permission-checks.md) ([#25])
 - mounts/ — [distro-to-distro](mounts/future/distro-to-distro.md)
-  ([#10])
+  ([#10]), [attach-detach](mounts/future/attach-detach.md) ([#20]),
+  [stopped-targets](mounts/future/stopped-targets.md) ([#21])
 - protocol/ — [protocol-ranges](protocol/future/protocol-ranges.md)
   ([#14])
 - packaging/ —
@@ -64,3 +75,11 @@ in [milestone-1.0.md](../milestone-1.0.md).
 [#16]: https://github.com/daphnediane/container-mount/issues/16
 [#17]: https://github.com/daphnediane/container-mount/issues/17
 [#18]: https://github.com/daphnediane/container-mount/issues/18
+[#19]: https://github.com/daphnediane/container-mount/issues/19
+[#20]: https://github.com/daphnediane/container-mount/issues/20
+[#21]: https://github.com/daphnediane/container-mount/issues/21
+[#22]: https://github.com/daphnediane/container-mount/issues/22
+[#23]: https://github.com/daphnediane/container-mount/issues/23
+[#24]: https://github.com/daphnediane/container-mount/issues/24
+[#25]: https://github.com/daphnediane/container-mount/issues/25
+[#26]: https://github.com/daphnediane/container-mount/issues/26

@@ -21,7 +21,8 @@ pub const VERBS: &[&str] = &["cat", "copy", "cp", "help", "list", "ls", "stat"];
 /// of being taken for a TARGET.
 pub const RESERVED: &[&str] = &[
     "attach", "chmod", "chown", "detach", "df", "du", "edit", "events", "export", "find", "import",
-    "inspect", "ln", "mkdir", "mv", "open", "prepare", "prune", "rm", "rmdir", "sync", "touch",
+    "inspect", "ln", "mkdir", "mv", "open", "prepare", "prune", "rm", "rmdir", "snapshot", "sync",
+    "touch", "xattr",
 ];
 
 /// What the first word names.

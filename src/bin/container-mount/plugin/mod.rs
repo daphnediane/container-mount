@@ -83,9 +83,9 @@ usage: container mount [--dev] COMMAND [OPTIONS] [--] ARGS...
   --version [--format json]      plugin, interface, and protocol versions
   --dev                          dev seams: CONTAINER_CLI, in-tree servers
 
-  Reserved for later: attach detach inspect prune mv rm mkdir rmdir ln
-  touch chmod chown du df find sync export import edit open events
-  prepare.";
+  Reserved for later: attach detach inspect prune snapshot mv rm mkdir
+  rmdir ln touch chmod chown xattr du df find sync export import edit
+  open events prepare.";
 
 /// Entry point for plugin mode. `args` excludes the program name.
 pub fn run(args: &[String]) -> Result<()> {
