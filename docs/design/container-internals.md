@@ -78,6 +78,10 @@ this check; there is deliberately no switch to relax it yet.
   container already defines wins over `-e` (shells, which keep the
   last, hide this). The plugin therefore passes the token under a
   fresh `CONTAINER_MOUNT_TOKEN_<nonce>` name (`serve --token-env`).
+  The same symptom on `run` was [apple/container#1212], fixed by #1218
+  inside `Parser.allEnv`; `ContainerExec` appends its entries to the
+  init process's environment outside that de-duplication.
+  `tests/upstream-exec-env.sh` reproduces it.
 - **`container machine inspect NAME`** prints a JSON array whose
   `[0].containerId` names the machine's backing container — an
   ordinary container the dial route reaches (plain `container ls`
@@ -123,9 +127,11 @@ handshake error), not open. `version` and `help` never check.
    home-relative paths, `USER@` ownership, and guest-to-guest copies.
 5. `container copy` semantics above still hold (modes kept, parents
    created, nesting into an existing directory).
-6. The exec environment merge: if upstream de-duplicates, the
-   `--token-env` workaround stays harmless; note the fix here.
+6. The exec environment merge: `tests/upstream-exec-env.sh` exits 1
+   while it's broken. If upstream fixes it, the `--token-env`
+   workaround stays harmless; note the fixed version here.
 7. Then add the minor to `VERIFIED_CONTAINER_MINOR`.
 
 [container-internals]: https://github.com/daphnediane/container-distro/blob/main/docs/design/container-internals.md
+[apple/container#1212]: https://github.com/apple/container/issues/1212
 [integration levels]: https://github.com/daphnediane/container-distro/blob/main/docs/design/lower-level-integration.md
