@@ -40,8 +40,9 @@ so no minimum-OS gate; that changes if the FSKit module joins the
 payload (it will want macOS ≥ 26).
 
 Payload — the per-triple layout of
-[install-layout.md](install-layout.md); release builds carry the
-`packaged` and `clap` cargo features:
+[install-layout.md](install-layout.md). (The planned `packaged` and
+`clap` cargo features, #4 and #5, will be set on release builds; 0.1.0
+has neither.)
 
 - `bin/container-mount` — host client/CLI
 - `bin/uninstall-container-mount.sh`, `bin/update-container-mount.sh` — the
@@ -58,15 +59,16 @@ Payload — the per-triple layout of
   plugin; Apple's `container` shares the `/usr/local` root, so this is
   where it looks
 - `share/doc/container-mount/{LICENSE,THIRD-PARTY-NOTICES.yaml}`
-- `share/man/man1/container-mount*.1` — `clap_mangen` output on clap-feature
-  builds, staged via `install-man` like container-distro's
+- `share/man/man1/container-mount*.1` — planned with the clap feature
+  (#5): `clap_mangen` output staged via `install-man`, like
+  container-distro's; not in 0.1.0
 
 Upgrades obsolete stale files the same way: Installer removes
 receipt-owned paths the new payload doesn't carry. Uninstall is
 `pkgutil`-receipt-driven (never a hardcoded list) — see the header of
-`packaging/uninstall-container-mount.sh`. container-mount's one piece of per-user
-state is the fetched-servers dir ([install-layout]), so uninstall
-offers a keep/delete-data prompt for it.
+`packaging/uninstall-container-mount.sh`. container-mount keeps no
+per-user state in 0.1.0; the planned per-user servers dir (#4) is the
+first, and uninstall gains a keep/delete-data prompt with it.
 
 ## Self-update and fetch
 
@@ -82,9 +84,9 @@ is also installed. `container-mount fetch-servers` installs just the servers —
 `cargo install` can't provide and the download path for users who
 only need the guest side (e.g. container-distro installs). It fetches
 the bundle matching its own version and lands servers under
-`<prefix>/libexec/container-mount/<triple>/`, or the per-user servers dir
-when the prefix isn't writable; on `packaged` builds the bundled
-servers count as already fetched. The full semantics and the
+`<prefix>/libexec/container-mount/<triple>/`. Planned (#4): the
+per-user servers dir when the prefix isn't writable, and `packaged`
+builds counting the bundled servers as already fetched. The full semantics and the
 embedder contract are in [install-layout.md](install-layout.md).
 
 ## Signing and notarization
@@ -154,4 +156,3 @@ has to span compile + collect.
 - Every run re-checks HEAD, version, and tree status before bundling,
   so a checkout that moved mid-build fails before anything is signed.
 
-[install-layout]: install-layout.md

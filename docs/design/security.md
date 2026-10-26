@@ -8,9 +8,10 @@ trust-boundary rules for anyone changing code on either side.
 A `container-mount serve` process runs as **root inside the guest** and
 serves the guest's whole root filesystem over a socket. A host
 `container-mount` client connects, proves a shared 32-byte token (and makes
-the server prove it back), then issues filesystem operations. The
-embedder (e.g. container-distro) supplies the socket, launches the
-server, generates the token, and passes the client its arguments.
+the server prove it back), then issues filesystem operations. Whoever
+launches the server — the `container mount` plugin for each command,
+or an embedder such as container-distro — supplies the transport,
+generates the token, and passes the client its arguments.
 
 ## Deliberate trade-offs (not bugs)
 
@@ -82,7 +83,9 @@ it:
    connect, on the live process, with no TOCTOU.
 3. **Mutual handshake** — fresh nonces each way; `mac_c` is compared
    in constant time. A guest-local process that can reach the socket
-   still can't use it without the token.
+   still can't use it without the token. Both sides also require the
+   same protocol `version` and, before 1.0, the same `wire`
+   fingerprint, so mismatched builds fail closed at the hello.
 4. **Server output is untrusted** — frames are capped (16 MiB) before
    allocation; names must be single components (no `/`, NUL,
    `.`/`..`); symlink targets are rewritten to stay inside the guest
@@ -102,8 +105,8 @@ it:
 
 ## What the server enforces
 
-- The socket sits in a `0700` root-owned directory so guest users
-  can't reach it.
+- A Unix-socket listener sits in a `0700` root-owned directory so
+  guest users can't reach it (vsock and TCP listeners: below).
 - `CONTAINER_MOUNT_TOKEN` (or the variable `--token-env` names) is read
   from the environment and cleared before serving; it never appears on
   a command line. The plugin uses a per-command name because `container
@@ -163,16 +166,16 @@ it:
   — our process is replaced, so nothing of ours runs during the
   privileged install, and Installer.app collects the password.
 - `update` never self-elevates, refuses to run as root, and refuses
-  to replace the copy installed under a container-plugins dir — that
-  copy belongs to the embedding package.
+  to replace a copy under a container-plugins dir — that copy is
+  refreshed by `install-all` (ours) or its embedder's installer.
 - `fetch-servers` installs the bundle matching the binary's own
-  version — client and server are lock-step. Fetched servers get the
-  same digest + stamp verification wherever they land: the prefix
-  `libexec` dir or, when it isn't writable (packaged installs,
-  non-root users), the per-user servers dir — a user-writable
-  location is acceptable there because only the user's own sessions
-  consume it. An explicit server-path override, if added, is a
-  `--dev` seam only.
+  version — client and server are lock-step — into the prefix
+  `libexec` dir, after the same digest + stamp verification;
+  `install-plugin` additionally refuses a server whose stamp's
+  protocol or `wire` differs from its own. A per-user servers dir for
+  unwritable prefixes is planned (#4); being user-writable, it would
+  be acceptable only because just that user's sessions consume it. An
+  explicit server-path override, if added, is a `--dev` seam only.
 - `CONTAINER_MOUNT_RELEASES_URL` is a **dev-only** seam honored only behind
   `--dev` on that invocation — an env var alone can never redirect
   release downloads.
