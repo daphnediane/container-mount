@@ -1,7 +1,7 @@
 [package]
 name = "container-mount"
 description = "Guest-side file server and host client for reaching Linux-guest filesystems over a relayed socket (`\\\\wsl$`-style), with a mutual-token handshake and a validating host client"
-version = "0.1.0-dev"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.89"
 license = "BSD-2-Clause"
