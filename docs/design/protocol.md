@@ -22,6 +22,10 @@ A session is one framed stream. Three ways to get one:
 - **Inherited fd** (`--fd N` / `serve --stdio`) — the caller passes an
   already-connected socket, e.g. an agent handing the module an
   `SCM_RIGHTS` fd, or `container exec -i` pipes.
+- **vsock** (planned, `serve --listen vsock:PORT`) — reaches running
+  containers created without a socket relay; the host side is an
+  inherited fd from the engine's dial. See
+  [mount-backends.md](mount-backends.md#transports).
 
 ## Connection hygiene (Unix paths)
 
