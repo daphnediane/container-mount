@@ -28,7 +28,7 @@ use container_mount::client::Client;
 use container_mount::connect::Stream;
 use container_mount::dial::{self, APISERVER_REQUIREMENT};
 use container_mount::proto;
-use container_mount::servers::{self, Arch};
+use container_mount::servers::{self, Platform};
 
 use crate::fscli;
 
@@ -166,8 +166,9 @@ fn connect(dev: bool, target: &str) -> Result<(Client, u32)> {
 fn deliver(dev: bool, id: &str, nonce: &str) -> Result<String> {
     // Apple silicon VMs run an arm64 kernel even for amd64 images
     // (Rosetta), so the server matches the host.
-    let arch = Arch::parse(std::env::consts::ARCH).context("unsupported host architecture")?;
-    let server = servers::server_path(arch, dev)?;
+    let platform =
+        Platform::parse(std::env::consts::ARCH).context("unsupported host architecture")?;
+    let server = servers::server_path(platform, dev)?;
     let stage = engine::private_temp_dir()?;
     let result = (|| {
         let bin = stage.join("container-mount");

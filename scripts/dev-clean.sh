@@ -69,8 +69,10 @@ step "fetched/built servers"
 for prefix in "$CH" /usr/local "$HOME/.local"; do
     d="$prefix/libexec/container-mount"
     [ -d "$d" ] || continue
-    for f in "$d"/container-mount-server-*; do
-        [ -e "$f" ] && sudo_if "$d" rm -f "$f"
+    for f in "$d"/*/container-mount; do
+        [ -e "$f" ] || continue
+        sudo_if "$d" rm -f "$f"
+        sudo_if "$d" rmdir "$(dirname "$f")" 2>/dev/null
     done
     sudo_if "$prefix/libexec" rmdir "$d" 2>/dev/null
     sudo_if "$prefix" rmdir "$prefix/libexec" 2>/dev/null

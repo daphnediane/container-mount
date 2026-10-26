@@ -68,10 +68,14 @@ if the environment alone could enable them:
 
 ## Release assets
 
-`fetch-servers` expects `container-mount-servers-<ver>.tar.gz` containing
-`container-mount-server-aarch64` + `container-mount-server-x86_64`; `update` expects
-`container-mount-<host-triple>-v<ver>.tar.gz` containing the `container-mount`
-binary plus any `container-mount-server-*` it should install. Asset
+`fetch-servers` expects `container-mount-servers-<ver>.tar.gz` (its
+own version only) containing `<triple>/container-mount` for each musl
+triple; `update` expects `container-mount-<host-triple>-v<ver>.tar.gz`
+containing the `container-mount` binary plus any
+`<triple>/container-mount` servers it should install -- both mirror
+`libexec/container-mount/` ([install-layout]). These names and
+layouts are what every released `update` looks for, so they can't
+change without a fallback once shipped. Asset
 integrity is the GitHub API-reported SHA-256 digest, checked before
 install — the digest is the trust root, not the transport.
 
@@ -103,4 +107,5 @@ draft release — see [docs/design/packaging.md] and
   clippy/build, notices freshness, e2e when an engine is up).
 
 [docs/design/packaging.md]: docs/design/packaging.md
+[install-layout]: docs/design/install-layout.md
 [docs/design/release.md]: docs/design/release.md

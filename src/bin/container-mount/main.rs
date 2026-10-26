@@ -65,8 +65,10 @@ usage: container-mount [--dev] [--timeout SECS]
   check      verify transport, peer, and the session handshake
   socket-path KEY   print a managed private host socket path for KEY
   servers    list known guest server binaries (-v shows search paths)
-  server-path --arch ARCH   path of the server binary for ARCH
-  fetch-servers [--version V] [--prefix DIR]   download server binaries
+  server-path --triple T [--fetch]   path of the server for T (a target
+             triple, `linux-arm64`, or `arm64`/`amd64`); --fetch
+             downloads this release's servers first when it's missing
+  fetch-servers [--prefix DIR]   download this release's server binaries
   update     self-update this install to the latest release
              [--version V] [--dry-run] [--force]
   plugin ... the `container mount` plugin interface, uninstalled
@@ -241,11 +243,11 @@ fn real_main() -> Result<()> {
 fn servers(args: &[String], dev: bool) -> Result<()> {
     let verbose = args.iter().any(|a| a == "-v" || a == "--verbose");
     let found = container_mount::servers::servers(dev);
-    for arch in container_mount::servers::Arch::ALL {
-        match found.iter().find(|s| s.arch == arch) {
+    for platform in container_mount::servers::Platform::ALL {
+        match found.iter().find(|s| s.platform == platform) {
             Some(s) => println!(
-                "{:<7} {}  {}",
-                arch.label(),
+                "{:<11} {}  {}",
+                platform.label(),
                 match (s.version.as_deref(), s.protocol) {
                     (Some(v), Some(p)) => format!("{v} (protocol {p})"),
                     (Some(v), None) => v.to_string(),
@@ -253,7 +255,7 @@ fn servers(args: &[String], dev: bool) -> Result<()> {
                 },
                 s.path.display()
             ),
-            None => println!("{:<7} (not found)", arch.label()),
+            None => println!("{:<11} (not found)", platform.label()),
         }
     }
     if verbose {
@@ -266,25 +268,36 @@ fn servers(args: &[String], dev: bool) -> Result<()> {
 }
 
 fn server_path(args: &[String], dev: bool) -> Result<()> {
-    let mut arch = None;
+    use container_mount::servers::{self, Platform};
+    let mut platform = None;
+    let mut fetch = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--arch" | "-a" => {
-                let v = it.next().context("--arch needs a value")?;
-                arch = container_mount::servers::Arch::parse(v);
-                if arch.is_none() {
-                    bail!("unknown architecture `{v}` (arm64 or amd64)");
-                }
+            "--triple" | "-t" => {
+                let v = it.next().context("--triple needs a value")?;
+                platform = Some(Platform::parse(v).with_context(|| {
+                    format!(
+                        "unknown platform `{v}` (one of: {})",
+                        Platform::ALL.map(|p| p.triple()).join(", ")
+                    )
+                })?);
             }
+            "--fetch" => fetch = true,
             _ => bail!("unknown argument `{a}`"),
         }
     }
-    let arch = arch.context("server-path needs --arch arm64|amd64")?;
-    println!(
-        "{}",
-        container_mount::servers::server_path(arch, dev)?.display()
-    );
+    let platform = platform.context("server-path needs --triple T")?;
+    // Ensure-then-print: an installed server prints as-is; a missing
+    // one is fetched (this release's bundle only) first.
+    let path = match servers::server_path(platform, dev) {
+        Err(_) if fetch => {
+            update::fetch_servers(&[], dev)?;
+            servers::server_path(platform, dev)?
+        }
+        found => found?,
+    };
+    println!("{}", path.display());
     Ok(())
 }
 

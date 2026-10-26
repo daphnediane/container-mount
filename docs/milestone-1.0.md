@@ -14,9 +14,9 @@ aren't repeated here — only the 1.0-specific deltas are.
 
 ## Before tagging 1.0
 
-- [ ] **Close the `1.0` milestone** — the six items under
+- [ ] **Close the `1.0` milestone** — the items under
   [docs/work/](work/README.md#10-milestone) (`gh issue list
-  --milestone 1.0`; #1–#6 open as of 2026-10-25), including the
+  --milestone 1.0`; #3 done 2026-10-26), including the
   crates.io decision (#1) and the normative wire contract (#6).
 - [x] **GPG signatures, or not** — matched container-distro: signed
   release tarballs carry a `gpg --detach-sign` `.asc` next to the

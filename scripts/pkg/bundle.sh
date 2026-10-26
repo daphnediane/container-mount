@@ -35,7 +35,8 @@ COMPONENT=container-mount-core.pkg
 IDENTIFIER=io.github.daphnediane.container-mount
 TARGET=aarch64-apple-darwin
 CATALOG="$OUT/collect"
-SERVERS="$OUT/bin/container-mount-server-aarch64 $OUT/bin/container-mount-server-x86_64"
+# collect.sh stages the servers as <triple>/container-mount here.
+SERVERS="$OUT/servers"
 SBOM="container-mount-$version$prov_suffix-sbom.cdx"
 
 # Only the host binary is signed — the musl servers are ELF.
@@ -54,7 +55,7 @@ mkdir -p "$PAYLOAD/bin" "$PAYLOAD/libexec/container-mount" \
     "$PAYLOAD/share/doc/container-mount"
 cp "$OUT/bin/container-mount" "$CATALOG/uninstall-container-mount.sh" \
     "$CATALOG/update-container-mount.sh" "$PAYLOAD/bin/"
-cp $SERVERS "$PAYLOAD/libexec/container-mount/"
+cp -R "$SERVERS/." "$PAYLOAD/libexec/container-mount/"
 cp "$CATALOG/LICENSE" "$CATALOG/THIRD-PARTY-NOTICES.yaml" \
     "$PAYLOAD/share/doc/container-mount/"
 
@@ -131,7 +132,7 @@ SERVERS_DIR="container-mount-servers-$version"
 SERVERS_NAME="$SERVERS_DIR$prov_suffix.tar.gz"
 rm -rf "$OUT/${SERVERS_DIR:?}" "$OUT/$SERVERS_DIR"*.tar.gz
 mkdir -p "$OUT/$SERVERS_DIR"
-cp $SERVERS "$OUT/$SERVERS_DIR/"
+cp -R "$SERVERS/." "$OUT/$SERVERS_DIR/"
 tar -czf "$OUT/$SERVERS_NAME" -C "$OUT" "$SERVERS_DIR"
 rm -rf "$OUT/${SERVERS_DIR:?}"
 
@@ -149,8 +150,9 @@ TAR_NAME="$TARBALL_DIR$prov_suffix.tar.gz"
 [ -n "${CODESIGN_IDENTITY:-}" ] || TAR_NAME="$TARBALL_DIR$prov_suffix-unsigned.tar.gz"
 rm -rf "$OUT/${TARBALL_DIR:?}" "$OUT/$TARBALL_DIR"*.tar.gz*
 mkdir -p "$OUT/$TARBALL_DIR"
-cp "$OUT/bin/container-mount" $SERVERS \
+cp "$OUT/bin/container-mount" \
     "$CATALOG/LICENSE" "$CATALOG/THIRD-PARTY-NOTICES.yaml" "$OUT/$TARBALL_DIR/"
+cp -R "$SERVERS/." "$OUT/$TARBALL_DIR/"
 tar -czf "$OUT/$TAR_NAME" -C "$OUT" "$TARBALL_DIR"
 rm -rf "$OUT/${TARBALL_DIR:?}"
 # Signed builds give the tarball a detached code signature too — same

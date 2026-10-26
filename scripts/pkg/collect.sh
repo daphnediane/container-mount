@@ -55,8 +55,12 @@ otool -l "$R/container-mount" | grep -q dep-v0 || \
 cp "$R/container-mount" "$OUT/bin/"
 # The musl servers are ELF — they can't carry a Mac signature; their
 # integrity is the version stamp plus the release digest check.
-cp "$TA/container-mount" "$OUT/bin/container-mount-server-aarch64"
-cp "$TX/container-mount" "$OUT/bin/container-mount-server-x86_64"
+# Staged as <triple>/container-mount — the libexec/container-mount layout
+# every artifact carries (docs/design/install-layout.md).
+rm -rf "$OUT/servers"
+mkdir -p "$OUT/servers/aarch64-unknown-linux-musl" "$OUT/servers/x86_64-unknown-linux-musl"
+cp "$TA/container-mount" "$OUT/servers/aarch64-unknown-linux-musl/"
+cp "$TX/container-mount" "$OUT/servers/x86_64-unknown-linux-musl/"
 
 step "CycloneDX SBOM"
 SBOM="container-mount-$PKG_VERSION$PROV_SUFFIX-sbom.cdx"

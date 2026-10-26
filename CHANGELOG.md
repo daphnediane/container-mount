@@ -49,6 +49,13 @@ and audited against the commit log.
   alpine, amd64, `FROM scratch`, and machine targets.
 - `serve --listen vsock:PORT`, plus `--once`, `--remove-binary`, and
   `--token-env NAME` for per-command servers.
+- Per-triple server layout ([#3]): servers install as
+  `libexec/container-mount/<triple>/container-mount`, and the pkg, the
+  servers bundle, and the client tarball all carry that layout.
+  `server-path --triple T` takes a triple, a label (`linux-arm64`), or
+  `arm64`/`amd64`, and `--fetch` downloads a missing server first;
+  `servers` lists platforms by label. `fetch-servers` always fetches
+  its own release (no `--version`): client and servers are lock-step.
 - `get`/`put` preserve sparse files end to end: only data extents
   cross the wire and holes stay unallocated on both sides.
 - Release packaging: `scripts/build-pkg.sh` produces the macOS `.pkg`,
@@ -62,3 +69,5 @@ and audited against the commit log.
   artifact name always means tag content; `upload-release-artifacts.sh`
   verifies and swaps them in over the CI draft. Design docs in
   `docs/design/{protocol,security,filesystems,packaging,release,install-layout,server-portability,container-internals}.md`.
+
+[#3]: https://github.com/daphnediane/container-mount/issues/3

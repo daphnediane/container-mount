@@ -222,7 +222,7 @@ Shape:
 
 - **Root disk:** the target's ext4 (or a clone of it).
 - **Entrypoint:** the server, from a read-only servers share —
-  `--entrypoint /.container-mount/container-mount-server-<arch> serve …`, the same
+  `--entrypoint /.container-mount/<triple>/container-mount serve …`, the same
   "entrypoint inside a volume" trick distros use for `/sbin.distro/
   init`. The target's own init never runs.
 - **Transport:** vsock dial or `--publish-socket` — the helper is ours,

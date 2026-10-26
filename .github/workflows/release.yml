@@ -9,11 +9,12 @@ name: release
 #   container-mount-<ver>-unsigned.pkg            — macOS installer; the
 #                                          signed copy replaces it
 #                                          minus `-unsigned`
-#   container-mount-servers-<ver>.tar.gz          — container-mount-server-aarch64 +
-#                                          container-mount-server-x86_64
+#   container-mount-servers-<ver>.tar.gz          — <triple>/container-mount
+#                                          for both musl triples
 #   container-mount-aarch64-apple-darwin-v<ver>-unsigned.tar.gz
-#                                        — container-mount + both server
-#                                          binaries; the signed copy
+#                                        — container-mount + both
+#                                          <triple>/container-mount
+#                                          servers; the signed copy
 #                                          (minus `-unsigned`, plus
 #                                          .sig/.asc) is added by
 #                                          scripts/upload-release-artifacts.sh

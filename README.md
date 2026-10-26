@@ -56,15 +56,17 @@ know the wire protocol.
 ## Server binaries
 
 Releases ship `container-mount-servers-<ver>.tar.gz` with static musl builds
-for `aarch64` and `x86_64`. Install them next to an installed
-`container-mount` (or any prefix) with:
+for `aarch64` and `x86_64`, one `<triple>/container-mount` per platform.
+Install the ones matching this `container-mount`'s own release next to it
+(or under any prefix) with:
 
 ```bash
-container-mount fetch-servers            # <prefix>/libexec/container-mount/
+container-mount fetch-servers            # <prefix>/libexec/container-mount/<triple>/
 container-mount fetch-servers --prefix /usr/local
+container-mount server-path --triple arm64 --fetch   # fetch if missing, print path
 ```
 
-`container-mount servers` reports what it can find (arch, version, protocol)
+`container-mount servers` reports what it can find (platform, version, protocol)
 without executing anything. `container-mount update` self-updates an
 installed binary — it verifies the SHA-256 the release API reports,
 checks the macOS code signature on signed builds, and never

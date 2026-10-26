@@ -9,7 +9,7 @@
 #
 # `--install ~/.cargo` pairs with `cargo install --path .`: a container-mount
 # binary under <prefix>/bin discovers servers in
-# <prefix>/libexec/container-mount/container-mount-server-<arch> (src/servers.rs).
+# <prefix>/libexec/container-mount/<triple>/container-mount (src/servers.rs).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -22,11 +22,10 @@ done
 
 if [ "${1:-}" = "--install" ]; then
     PREFIX="${2:?usage: $0 --install PREFIX}"
-    DEST="$PREFIX/libexec/container-mount"
-    mkdir -p "$DEST"
-    install -m 0755 target/aarch64-unknown-linux-musl/release/container-mount \
-        "$DEST/container-mount-server-aarch64"
-    install -m 0755 target/x86_64-unknown-linux-musl/release/container-mount \
-        "$DEST/container-mount-server-x86_64"
-    echo "installed $DEST/container-mount-server-{aarch64,x86_64}"
+    for TARGET in aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+        DEST="$PREFIX/libexec/container-mount/$TARGET"
+        mkdir -p "$DEST"
+        install -m 0755 "target/$TARGET/release/container-mount" "$DEST/container-mount"
+        echo "installed $DEST/container-mount"
+    done
 fi

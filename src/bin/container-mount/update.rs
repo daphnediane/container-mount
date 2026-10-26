@@ -18,7 +18,11 @@
 //! `fetch-servers` is the package-installer path: download just the
 //! `container-mount-servers-<ver>.tar.gz` asset into the libexec dir so a
 //! `cargo install`/`cargo binstall` user gets guest servers without
-//! building them.
+//! building them. It always fetches this binary's own release — client
+//! and servers are lock-step (docs/design/install-layout.md).
+//!
+//! Both archives carry servers as `<triple>/container-mount`, the
+//! layout of `libexec/container-mount/` itself.
 //!
 //! Both go through [`container_mount::release`]; `CONTAINER_MOUNT_RELEASES_URL`
 //! applies only under `--dev` (see there for the security rule).
@@ -144,12 +148,12 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
     let (ver, _) = servers::stamped(&new_bin)?;
     check_new_binary(&new_bin, &exe, force)?;
     let mut servers_ok = Vec::new();
-    for arch in servers::Arch::ALL {
-        let s = unpacked.join(format!("container-mount-server-{}", arch.suffix()));
+    for platform in servers::Platform::ALL {
+        let s = servers::installed_path(&unpacked, platform);
         if s.is_file() {
             servers::stamped(&s)
                 .with_context(|| format!("{} failed its version-stamp check", s.display()))?;
-            servers_ok.push(s);
+            servers_ok.push((platform, s));
         }
     }
 
@@ -174,23 +178,26 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
     Ok(())
 }
 
-/// `container-mount fetch-servers [--version V] [--prefix DIR]` — install the
-/// release's server binaries into `<prefix>/libexec/container-mount` (default:
-/// the running binary's own install dir).
+/// `container-mount fetch-servers [--prefix DIR]` — install this
+/// release's server binaries into `<prefix>/libexec/container-mount`
+/// (default: the running binary's own install dir). There is no
+/// `--version`: a server from another release can't be relied on to
+/// handshake with this client.
 pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
-    let mut version = None;
     let mut prefix = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--version" => version = Some(it.next().context("--version needs a value")?.clone()),
             "--prefix" => {
                 prefix = Some(PathBuf::from(it.next().context("--prefix needs a value")?))
             }
-            _ => bail!("unknown argument `{a}` (fetch-servers wants [--version V] [--prefix DIR])"),
+            _ => bail!("unknown argument `{a}` (fetch-servers wants [--prefix DIR])"),
         }
     }
-    let (tag, rel) = fetch_release(version.as_deref(), dev)?;
+    let own = env!("CARGO_PKG_VERSION");
+    let (tag, rel) = fetch_release(Some(own), dev).with_context(|| {
+        format!("no published release {own} to fetch servers from — `container-mount update` installs a released build")
+    })?;
     let name = format!("container-mount-servers-{tag}.tar.gz");
     let asset =
         find_asset(&rel, &name).with_context(|| format!("release {tag} has no {name} asset"))?;
@@ -213,14 +220,15 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
     std::fs::create_dir_all(&dest).with_context(|| format!("cannot create {}", dest.display()))?;
 
     let mut installed = 0;
-    for arch in servers::Arch::ALL {
-        let s = unpacked.join(format!("container-mount-server-{}", arch.suffix()));
+    for platform in servers::Platform::ALL {
+        let s = servers::installed_path(&unpacked, platform);
         if !s.is_file() {
             continue;
         }
         let (v, p) = servers::stamped(&s)
             .with_context(|| format!("{} failed its version-stamp check", s.display()))?;
-        let to = dest.join(s.file_name().unwrap());
+        let to = servers::installed_path(&dest, platform);
+        install_dir_for(&to)?;
         install_file(&s, &to)?;
         installed += 1;
         println!(
@@ -231,7 +239,7 @@ pub fn fetch_servers(args: &[String], dev: bool) -> Result<()> {
     }
     let _ = std::fs::remove_dir_all(&work);
     if installed == 0 {
-        bail!("{name} contained no container-mount-server-* binaries");
+        bail!("{name} contained no <triple>/container-mount servers");
     }
     Ok(())
 }
@@ -373,18 +381,22 @@ fn install_file(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Create the `<triple>/` directory a server installs into.
+fn install_dir_for(server: &Path) -> Result<()> {
+    let dir = server.parent().context("server path has no parent")?;
+    std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))
+}
+
 /// Swap the running binary for `new` and install any server binaries
 /// into the exe's own server dir.
-fn install(exe: &Path, new: &Path, server_bins: &[PathBuf]) -> Result<()> {
+fn install(exe: &Path, new: &Path, server_bins: &[(servers::Platform, PathBuf)]) -> Result<()> {
     install_file(new, exe)?;
-    if !server_bins.is_empty()
-        && let Some(dir) = servers::server_dir_for(exe)
-    {
-        std::fs::create_dir_all(&dir)
-            .with_context(|| format!("cannot create {}", dir.display()))?;
-        for s in server_bins {
-            install_file(s, &dir.join(s.file_name().unwrap()))?;
-            eprintln!("installed {}", dir.join(s.file_name().unwrap()).display());
+    if let Some(dir) = servers::server_dir_for(exe) {
+        for (platform, s) in server_bins {
+            let to = servers::installed_path(&dir, *platform);
+            install_dir_for(&to)?;
+            install_file(s, &to)?;
+            eprintln!("installed {}", to.display());
         }
     }
     Ok(())
