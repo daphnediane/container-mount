@@ -58,6 +58,13 @@ cp "$OUT/bin/container-mount" "$CATALOG/uninstall-container-mount.sh" \
 cp -R "$SERVERS/." "$PAYLOAD/libexec/container-mount/"
 cp "$CATALOG/LICENSE" "$CATALOG/THIRD-PARTY-NOTICES.yaml" \
     "$PAYLOAD/share/doc/container-mount/"
+# The `container mount` plugin copy (binary + its bundled servers) is
+# produced by `install-all`, the same output a manual install writes;
+# Apple's `container` lives under the same /usr/local root, so the
+# payload's container-plugins dir is where it looks. --no-fetch: the
+# servers are already staged above.
+"$PAYLOAD/bin/container-mount" install-all --no-fetch \
+    --plugin-dir "$PAYLOAD/libexec/container-plugins"
 
 step "pkgbuild"
 # The component pkg is an intermediate, not a release asset — keep it

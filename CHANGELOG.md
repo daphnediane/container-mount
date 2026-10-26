@@ -47,6 +47,13 @@ and audited against the commit log.
   `container` releases outside the verified range
   (`docs/design/container-internals.md`). `tests/plugin-e2e.sh` covers
   alpine, amd64, `FROM scratch`, and machine targets.
+- `install-all` / `uninstall-all` (and `install-plugin` /
+  `uninstall-plugin`): fetch this release's servers when missing and
+  register the `container mount` plugin as a self-contained copy
+  (`container-plugins/mount/` with the binary and its servers), using
+  `sudo` only for the file operations and skipping no-op reinstalls.
+  The `.pkg` ships the plugin; `update` notes when the plugin copy
+  needs refreshing.
 - `serve --listen vsock:PORT`, plus `--once`, `--remove-binary`, and
   `--token-env NAME` for per-command servers.
 - Per-triple server layout ([#3]): servers install as

@@ -175,6 +175,15 @@ fn update(version: Option<&str>, force: bool, dry_run: bool, dev: bool) -> Resul
     install(&exe, &new_bin, &servers_ok)?;
     let _ = std::fs::remove_dir_all(&work);
     println!("updated {} to container-mount {tag}", exe.display());
+    // `update` replaces only this binary; the plugin keeps its own copy.
+    #[cfg(target_os = "macos")]
+    if let Some(dir) = crate::plugin::install::stale_plugin(false) {
+        println!(
+            "the `container mount` plugin at {} is a separate copy — run \
+             `container-mount install-all` to update it",
+            dir.display()
+        );
+    }
     Ok(())
 }
 

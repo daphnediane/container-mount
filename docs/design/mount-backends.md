@@ -470,8 +470,8 @@ the code, not before:
 - Release layout: the servers directory must be shareable read-only
   as a unit (it already is — `libexec/container-mount/`).
 - The `mount` plugin binary: the dial client (raw XPC, done),
-  `fs` and `version` (done), the helper VM, `prepare`/`list`, and
-  plugin install into `container`'s plugin root (`install-all`).
+  `fs` and `version` (done), plugin install into `container`'s plugin
+  root (`install-all`, done), the helper VM, and `prepare`/`list`.
 
 The first plugin slice is in `src/bin/container-mount/plugin/` and
 `src/dial.rs`; the upstream internals it relies on, and its version

@@ -16,6 +16,7 @@
 //! process and that server's environment.
 
 mod engine;
+pub mod install;
 mod upstream;
 
 use std::os::unix::net::UnixStream;

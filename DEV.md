@@ -98,7 +98,9 @@ draft release — see [docs/design/packaging.md] and
 
 - `scripts/install-local.sh` — `cargo install --path .` plus
   `scripts/build-servers.sh --install ~/.cargo` (both musl servers
-  into `libexec/container-mount/`).
+  into `libexec/container-mount/`), then `install-all --no-fetch` to
+  register the `container mount` plugin (sudo when the plugin dir is
+  root-owned).
 - `scripts/dev-clean.sh` — remove every install: pkg payload, cargo
   binary, `libexec/container-mount/` server dirs (`-n` previews).
 - `scripts/build-servers.sh` — just the musl builds; `--install

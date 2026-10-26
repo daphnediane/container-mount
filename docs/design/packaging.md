@@ -51,6 +51,12 @@ Payload — the per-triple layout of
 - `libexec/container-mount/<triple>/container-mount` — the guest servers, one dir
   per guest platform (`aarch64-`/`x86_64-unknown-linux-musl` today),
   where `servers::server_dir_for` discovers them
+- `libexec/container-plugins/mount/{config.toml,bin/mount,libexec/container-mount/<triple>/container-mount}`
+  — the `container mount` plugin: a copy of the (signed) binary and
+  the servers, produced by `install-all --no-fetch --plugin-dir
+  <payload>/libexec/container-plugins` like container-distro's payload
+  plugin; Apple's `container` shares the `/usr/local` root, so this is
+  where it looks
 - `share/doc/container-mount/{LICENSE,THIRD-PARTY-NOTICES.yaml}`
 - `share/man/man1/container-mount*.1` — `clap_mangen` output on clap-feature
   builds, staged via `install-man` like container-distro's

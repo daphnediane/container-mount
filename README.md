@@ -72,6 +72,24 @@ installed binary — it verifies the SHA-256 the release API reports,
 checks the macOS code signature on signed builds, and never
 self-elevates.
 
+## The `container mount` plugin
+
+On macOS with Apple's `container`, register the plugin so `container
+mount ...` works:
+
+```bash
+container-mount install-all      # fetch missing servers + install the plugin
+container-mount uninstall-all    # remove the plugin again
+```
+
+The `.pkg` installs it already. The plugin is a **copy** of this
+binary plus its servers under `<container
+prefix>/libexec/container-plugins/mount/` (not a link: that directory
+is root-owned, and other users run what's in it); `install-all` uses
+`sudo` only for those file operations, and a re-run with nothing new
+doesn't prompt. `container-mount update` replaces only the main
+binary and says when the plugin copy needs an `install-all`.
+
 ## Verifying downloads
 
 Signed builds sign the pkg, the host binary, and the client tarball

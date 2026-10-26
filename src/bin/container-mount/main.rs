@@ -73,6 +73,11 @@ usage: container-mount [--dev] [--timeout SECS]
              [--version V] [--dry-run] [--force]
   plugin ... the `container mount` plugin interface, uninstalled
              (macOS; `plugin --help`)
+  install-all [--plugin-dir DIR] [--no-plugin] [--no-fetch]
+             fetch this release's servers if missing and register the
+             `container mount` plugin (macOS; sudo only if needed)
+  uninstall-all [--plugin-dir DIR]   remove the plugin registration
+  install-plugin / uninstall-plugin [--plugin-dir DIR]   just the plugin
 
   --socket PATH   unix socket to connect to (or CONTAINER_MOUNT_SOCKET)
   --fd N          inherited, already-connected unix socket fd
@@ -222,6 +227,14 @@ fn real_main() -> Result<()> {
         "server-path" => server_path(&rest[1..], o.dev),
         "fetch-servers" => update::fetch_servers(&rest[1..], o.dev),
         "update" => update::run(&rest[1..], o.dev),
+        #[cfg(target_os = "macos")]
+        "install-all" => plugin::install::install_all(&rest[1..], o.dev),
+        #[cfg(target_os = "macos")]
+        "uninstall-all" => plugin::install::uninstall_all(&rest[1..], o.dev),
+        #[cfg(target_os = "macos")]
+        "install-plugin" => plugin::install::install_plugin(&rest[1..], o.dev),
+        #[cfg(target_os = "macos")]
+        "uninstall-plugin" => plugin::install::uninstall_plugin(&rest[1..], o.dev),
         // The plugin interface without installing it (`container mount …`).
         #[cfg(target_os = "macos")]
         "plugin" => {

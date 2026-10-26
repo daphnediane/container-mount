@@ -122,6 +122,17 @@ it:
   "io.github.daphnediane.container-mount" and anchor apple generic` on the
   download, and refuses a team-ID mismatch with the installed copy
   without explicit consent.
+- `install-all`/`install-plugin` **copy** the binary and servers into
+  `container`'s root-owned plugin dir — a symlink there would let the
+  user who owns the build output replace what every user's `container
+  mount` runs, and an existing symlink at a destination is removed,
+  not written through. Servers must carry our own version's stamp.
+  When the dir isn't user-writable the file ops alone re-run as
+  `sudo <self> install-plugin --plugin-dir ROOT --from BIN --server
+  TRIPLE:PATH…` — every input explicit, so sudo's env reset can't
+  change what lands; `container` is resolved as the invoking user
+  first. Uninstall deletes only the files install writes, under a
+  `config.toml` carrying our marker.
 - `update` never self-elevates, refuses to run as root, and refuses
   to replace the copy installed under a container-plugins dir — that
   copy belongs to the embedding package.

@@ -24,6 +24,23 @@ share/man/man1/container-mount*.1                     clap-feature builds
 bin/uninstall-container-mount.sh, bin/update-container-mount.sh   pkg only
 ```
 
+The `container mount` plugin is a second, self-contained root inside
+`container`'s plugin directory (`<container
+prefix>/libexec/container-plugins/`), written by `install-all` /
+`install-plugin`:
+
+```text
+mount/config.toml                                    abstract carries "(container-mount)"
+mount/bin/mount                                      a copy of bin/container-mount
+mount/libexec/container-mount/<triple>/container-mount   copies of the servers
+```
+
+`mount/` is a prefix of the same shape, so the plugin copy finds its
+servers by the ordinary prefix rule and runs nothing from outside that
+root-owned tree. `uninstall-plugin` removes exactly these files (and
+directories that end up empty), and only under a `config.toml` that
+carries the marker.
+
 `<triple>` is the Rust target triple the server was built for.
 Subdirectories (not flat `container-mount-server-<triple>` files) because a
 platform can need side-files later — a Windows server ships `.exe`

@@ -21,18 +21,21 @@ const CONTAINER_CLI_ENV: &str = "CONTAINER_CLI";
 /// The `container` binary: `CONTAINER_CLI` under `--dev`, then the
 /// installer's path, then `PATH`. Selecting a user-privilege binary is
 /// PATH-equivalent, but it stays behind `--dev` like container-distro's.
-fn binary(dev: bool) -> OsString {
+/// `None` when none resolves.
+pub fn resolve(dev: bool) -> Option<PathBuf> {
     if dev && let Some(p) = std::env::var_os(CONTAINER_CLI_ENV) {
-        return p;
+        return Some(p.into());
     }
     if Path::new(DEFAULT_CONTAINER).is_file() {
-        return DEFAULT_CONTAINER.into();
+        return Some(DEFAULT_CONTAINER.into());
     }
-    "container".into()
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|d| d.join("container"))
+        .find(|p| p.is_file())
 }
 
 pub fn command(dev: bool) -> Command {
-    Command::new(binary(dev))
+    Command::new(resolve(dev).map_or_else(|| OsString::from("container"), PathBuf::into_os_string))
 }
 
 /// Run `container ARGS`, failing with its stderr on a non-zero exit.
