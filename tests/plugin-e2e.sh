@@ -53,7 +53,7 @@ NAMES=()
 cleanup() {
     [ "$KEEP" = 1 ] && return
     for n in "${NAMES[@]}"; do container delete -f "$n" >/dev/null 2>&1 || true; done
-    [ "$MACHINE" = 1 ] && container machine delete -f "$TAG-machine" >/dev/null 2>&1 || true
+    [ "$MACHINE" = 1 ] && container machine delete "$TAG-machine" >/dev/null 2>&1 || true
     rm -rf "$SCRATCH"
 }
 trap cleanup EXIT
