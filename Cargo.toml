@@ -1,6 +1,8 @@
 [package]
 name = "container-mount"
-description = "Guest-side file server and host client for reaching Linux-guest filesystems over a relayed socket (`\\\\wsl$`-style), with a mutual-token handshake and a validating host client"
+description = "Files in Apple `container` containers and machines from macOS: the `container mount` plugin, a static Linux guest file server, and a validating host client (a `\\\\wsl$`-style file bridge)"
+keywords = ["container", "filesystem", "macos", "vsock", "wsl"]
+categories = ["filesystem", "command-line-utilities", "virtualization"]
 version = "0.2.0-dev"
 edition = "2024"
 rust-version = "1.89"
