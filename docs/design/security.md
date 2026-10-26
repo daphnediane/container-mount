@@ -26,6 +26,24 @@ server, generates the token, and passes the client its arguments.
   engines that publish ports, not sockets; there is no peer-identity
   check on TCP, so the token is the only gate. Bind loopback and
   prefer the unix transport wherever the engine supports it.
+- **The `container mount` plugin reaches every running container.**
+  The apiserver's dial route answers any same-user process for any
+  running container, with no create-time opt-in — the same reach as
+  `container exec`, which the plugin also uses. The token is still the
+  gate on the stream; container-distro's `files: off` is policy, not a
+  wall (see [mount-backends.md](mount-backends.md#security-notes)).
+- **Copy-delivered servers are guest-swappable until they start.**
+  `container copy` lands the per-command server owned by the host uid.
+  Under an existing `/root` (`0700`) only guest root can reach it; in
+  images without `/root` (`FROM scratch`) the created parent is
+  `0755`, so a guest process running as that uid could replace the
+  binary between the copy and root's `exec`. The server deletes its
+  copy once running, which narrows the window but doesn't close it.
+  The risk is guest-internal (guest uid to guest root): everything
+  that protects the host is in the client.
+- **Guest root sees the session token.** The server's initial
+  environment stays readable in `/proc/<pid>/environ` to guest root —
+  who already has every file the token unlocks.
 - **Symlink confinement is a display/export guarantee, not a jail.**
   It keeps a *mount* or `get` from silently landing on a host path; a
   user with guest access can always create links — the client just
@@ -53,13 +71,30 @@ it:
    `.`/`..`); symlink targets are rewritten to stay inside the guest
    root before anything host-side resolves them; in-flight requests
    are bounded and calls time out.
+5. **Apiserver identity (plugin dial)** — the XPC connection to
+   `com.apple.container.apiserver` is pinned with
+   `xpc_connection_set_peer_code_signing_requirement` (Apple's signed
+   release build, team `UPBK2H6LZM`) before the dial request goes
+   out, so a look-alike Mach service can't hand the client a stream.
+   A guest process (even root) squatting the dialed vsock port fails
+   the handshake, and the plugin refuses rather than retrying.
+   Internals the plugin depends on are listed, with their version gate,
+   in [container-internals.md](container-internals.md).
+
+<!-- cspell:ignore UPBK2H6LZM -->
 
 ## What the server enforces
 
 - The socket sits in a `0700` root-owned directory so guest users
   can't reach it.
-- `CONTAINER_MOUNT_TOKEN` is read from the environment and cleared before
-  serving; it never appears on a command line.
+- `CONTAINER_MOUNT_TOKEN` (or the variable `--token-env` names) is read
+  from the environment and cleared before serving; it never appears on
+  a command line. The plugin uses a per-command name because `container
+  exec -e` can't override a variable the target already defines.
+- vsock listeners (`--listen vsock:`) use ports below 1024, which need
+  `CAP_NET_BIND_SERVICE` — unprivileged guest processes can't squat
+  them. `--once` exits only after an *authenticated* session ends, so
+  a guest process that connects first can't end the host's server.
 - All filesystem access is `*at()`-relative to `O_PATH|O_NOFOLLOW`
   fds — no host path is ever opened by name.
 - Idle exit: no client within 30 s of start, or 30 s after the last

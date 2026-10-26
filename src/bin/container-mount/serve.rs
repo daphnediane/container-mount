@@ -23,6 +23,11 @@ pub enum Listen {
     Unix(PathBuf),
     /// A TCP port — for engines that can only publish TCP, and testing.
     Tcp(String),
+    /// An `AF_VSOCK` port — what the host reaches through `container`'s
+    /// dial route, with no create-time socket relay. Ports below 1024
+    /// need `CAP_NET_BIND_SERVICE`, so unprivileged guest processes
+    /// can't squat them.
+    Vsock(u32),
 }
 
 /// Options for `serve`.
@@ -34,10 +39,21 @@ pub struct ServeArgs {
     pub listen: Listen,
     /// Exit after this long with no connected client.
     pub idle: Duration,
+    /// Exit when the first authenticated session ends — one server per
+    /// host command, so the token lives only as long as that command.
+    pub once: bool,
+    /// Delete our own binary (and its directory, once empty) after
+    /// startup — for per-command copies delivered by `container copy`,
+    /// in images that may have no `rm`.
+    pub remove_binary: bool,
+    /// The variable holding the session token — `CONTAINER_MOUNT_TOKEN`
+    /// unless `--token-env` names another.
+    pub token_env: String,
 }
 
 const USAGE: &str = "usage: container-mount serve [--uid UID] [--gid GID] \
-     [--socket PATH | --listen unix:PATH | --listen tcp:ADDR] [--idle-secs N]";
+     [--socket PATH | --listen unix:PATH | --listen tcp:ADDR | --listen vsock:PORT] \
+     [--idle-secs N] [--once] [--remove-binary] [--token-env NAME]";
 
 pub fn parse(args: &[String]) -> Result<ServeArgs> {
     let socket_env = std::env::var_os(proto::SOCKET_ENV).map(PathBuf::from);
@@ -46,6 +62,9 @@ pub fn parse(args: &[String]) -> Result<ServeArgs> {
         gid: 0,
         listen: Listen::Unix(socket_env.unwrap_or_else(|| PathBuf::from(proto::DEFAULT_SOCKET))),
         idle: Duration::from_secs(30),
+        once: false,
+        remove_binary: false,
+        token_env: proto::TOKEN_ENV.into(),
     };
     let mut explicit = false;
     let mut it = args.iter();
@@ -55,6 +74,13 @@ pub fn parse(args: &[String]) -> Result<ServeArgs> {
             "--uid" => out.uid = num(flag, value()?)?,
             "--gid" => out.gid = num(flag, value()?)?,
             "--idle-secs" => out.idle = Duration::from_secs(num(flag, value()?)?.into()),
+            "--once" => out.once = true,
+            "--remove-binary" => out.remove_binary = true,
+            // `container exec -e` appends to the container's own
+            // environment without replacing a same-named entry, and
+            // getenv returns the first — so a launcher that can't
+            // control the target's environment picks a fresh name.
+            "--token-env" => out.token_env = value()?.clone(),
             "--socket" => {
                 set_listen(
                     &mut out,
@@ -68,7 +94,8 @@ pub fn parse(args: &[String]) -> Result<ServeArgs> {
                 let l = match spec.split_once(':') {
                     Some(("unix", p)) => Listen::Unix(PathBuf::from(p)),
                     Some(("tcp", a)) => Listen::Tcp(a.to_string()),
-                    _ => bail!("--listen wants unix:PATH or tcp:ADDR, got `{spec}`"),
+                    Some(("vsock", p)) => Listen::Vsock(num(flag, p)?),
+                    _ => bail!("--listen wants unix:PATH, tcp:ADDR, or vsock:PORT, got `{spec}`"),
                 };
                 set_listen(&mut out, &mut explicit, flag, l)?;
             }
@@ -130,6 +157,22 @@ mod tests {
         assert_eq!(t.listen, Listen::Tcp("0.0.0.0:9999".into()));
         let u = parse(&v(&["--listen", "unix:/y.sock"])).unwrap();
         assert_eq!(u.listen, Listen::Unix(PathBuf::from("/y.sock")));
+        let k = parse(&v(&[
+            "--listen",
+            "vsock:900",
+            "--once",
+            "--remove-binary",
+            "--token-env",
+            "T_1",
+        ]))
+        .unwrap();
+        assert_eq!(k.token_env, "T_1");
+        assert_eq!(u.token_env, proto::TOKEN_ENV);
+        assert_eq!(
+            (k.listen, k.once, k.remove_binary),
+            (Listen::Vsock(900), true, true)
+        );
+        assert!(!u.once && !u.remove_binary);
     }
 
     #[test]
@@ -140,6 +183,7 @@ mod tests {
             &["--what"],
             &["--socket", "/a", "--listen", "tcp:1:2"],
             &["--listen", "bogus:1"],
+            &["--listen", "vsock:x"],
         ] {
             assert!(parse(&v(bad)).is_err(), "{bad:?}");
         }

@@ -36,6 +36,19 @@ and audited against the commit log.
   punch hole, zero/collapse/insert ranges), `FsyncDir`/`SyncFs`, and
   xattr get/set/list/remove.
 - `cp` command — guest-side file copies without a wire round trip.
+- `container mount` plugin, first slice: `fs TARGET ls|stat|get|put|cp|check`
+  on any running container or `container machine` (by name) with no
+  create-time flags — the server is copied in with `container copy`,
+  started as root on a random vsock port below 1024 with a fresh
+  per-command token, and reached through the apiserver's dial route
+  over a code-signature-pinned XPC connection. `version --format json`
+  reports the plugin interface number. Runs as `container-mount plugin
+  ...` until installed as `container-plugins/mount/bin/mount`; warns on
+  `container` releases outside the verified range
+  (`docs/design/container-internals.md`). `tests/plugin-e2e.sh` covers
+  alpine, amd64, `FROM scratch`, and machine targets.
+- `serve --listen vsock:PORT`, plus `--once`, `--remove-binary`, and
+  `--token-env NAME` for per-command servers.
 - `get`/`put` preserve sparse files end to end: only data extents
   cross the wire and holes stay unallocated on both sides.
 - Release packaging: `scripts/build-pkg.sh` produces the macOS `.pkg`,
@@ -48,4 +61,4 @@ and audited against the commit log.
   build from a `git worktree` of the release tag, so a canonical
   artifact name always means tag content; `upload-release-artifacts.sh`
   verifies and swaps them in over the CI draft. Design docs in
-  `docs/design/{protocol,security,filesystems,packaging,release,install-layout,server-portability}.md`.
+  `docs/design/{protocol,security,filesystems,packaging,release,install-layout,server-portability,container-internals}.md`.

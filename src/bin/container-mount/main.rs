@@ -16,6 +16,8 @@
 //! copies.
 
 mod fscli;
+#[cfg(target_os = "macos")]
+mod plugin;
 mod serve;
 mod table;
 mod update;
@@ -67,6 +69,8 @@ usage: container-mount [--dev] [--timeout SECS]
   fetch-servers [--version V] [--prefix DIR]   download server binaries
   update     self-update this install to the latest release
              [--version V] [--dry-run] [--force]
+  plugin ... the `container mount` plugin interface, uninstalled
+             (macOS; `plugin --help`)
 
   --socket PATH   unix socket to connect to (or CONTAINER_MOUNT_SOCKET)
   --fd N          inherited, already-connected unix socket fd
@@ -188,7 +192,17 @@ fn connect_client(o: &Opts) -> Result<(container_mount::client::Client, String)>
 }
 
 fn real_main() -> Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut argv = std::env::args_os();
+    let exe = argv.next().map(PathBuf::from).unwrap_or_default();
+    let args: Vec<String> = argv
+        .map(|a| a.into_string())
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|a| anyhow::anyhow!("argument is not UTF-8: {a:?}"))?;
+    #[cfg(target_os = "macos")]
+    if plugin::invoked_as_plugin(&exe) {
+        return plugin::run(&args);
+    }
+    let _ = exe;
     let (o, rest) = parse_global(&args)?;
     let Some(cmd) = rest.first() else {
         bail!("{USAGE}");
@@ -206,6 +220,16 @@ fn real_main() -> Result<()> {
         "server-path" => server_path(&rest[1..], o.dev),
         "fetch-servers" => update::fetch_servers(&rest[1..], o.dev),
         "update" => update::run(&rest[1..], o.dev),
+        // The plugin interface without installing it (`container mount …`).
+        #[cfg(target_os = "macos")]
+        "plugin" => {
+            let dev = o.dev.then(|| "--dev".to_string());
+            plugin::run(
+                &dev.into_iter()
+                    .chain(rest[1..].iter().cloned())
+                    .collect::<Vec<_>>(),
+            )
+        }
         "ls" | "stat" | "get" | "put" | "cp" | "check" => {
             let (c, via) = connect_client(&o)?;
             fscli::run(cmd, &rest[1..], &c, &via, o.peer_requirement.is_some())

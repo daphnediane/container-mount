@@ -16,6 +16,8 @@
 
 pub mod client;
 pub mod connect;
+#[cfg(target_os = "macos")]
+pub mod dial;
 pub mod proto;
 pub mod release;
 pub mod servers;

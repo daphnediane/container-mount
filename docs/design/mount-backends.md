@@ -99,7 +99,7 @@ every cell; the client only ever sees a socket or an fd.
 | ------------------------------- | -------------------------- | -------- |
 | assets volume (`/sbin.distro`)  | distros, at create         | reverted |
 | read-only servers share         | any container, at create   | proposed |
-| `container copy` of a directory | running containers         | verified |
+| `container copy` of a directory | running containers         | done     |
 | `container copy` of one file    | running, image has `chmod` | weak     |
 | exec stdin into a shell         | running, image has `sh`    | weak     |
 | interpreter `memfd` exec        | running, has python/perl   | rejected |
@@ -131,8 +131,11 @@ replace the binary before root execs it. Copying under a root-only
 parent (`/root`, normally `0700`) closes that where the parent exists;
 where it doesn't, the residual risk is guest-internal (guest uid to
 guest root), not host-facing — the client enforces everything that
-protects the host. Not yet verified: copy into a `FROM scratch`
-container (no `/tmp`, possibly read-only root).
+protects the host. *Verified* on a `FROM scratch` container: the copy
+creates missing parents (root-owned, `0755` — so no root-only parent
+there), and copying onto an existing directory nests inside it like
+`cp -r`, so the plugin copies into a fresh directory per command and
+the server deletes its copy once running (`serve --remove-binary`).
 
 **Rejected.** Streaming over `exec -i` into `sh -c 'cat > f; chmod
 +x f'` depends on the image's shell and on a writable, exec-able
@@ -145,7 +148,7 @@ for that container — far too much surface to own for file access.
 | Transport                   | Reaches                    | Create-time flag | Status   |
 | --------------------------- | -------------------------- | ---------------- | -------- |
 | `--publish-socket` relay    | containers created with it | yes              | verified |
-| vsock via `containerDial`   | any running container      | no               | verified |
+| vsock via `containerDial`   | any running container      | no               | done     |
 | `exec -i` stdio (`--stdio`) | any running container      | no               | planned  |
 | TCP on the guest IP         | containers with a network  | no               | rejected |
 
@@ -458,26 +461,28 @@ the code, not before:
 
 ## What this implies for this repo
 
-- `serve --listen vsock:PORT` — new server transport (`AF_VSOCK`;
-  `libc::sockaddr_vm` is bound for Linux). Host side needs nothing new:
-  the embedder dials and passes the fd with `--fd`.
+- ~~`serve --listen vsock:PORT`~~ — done, with `--once`,
+  `--remove-binary`, and `--token-env` for per-command servers.
 - `serve --stdio` ([#11]) — the exec fallback.
 - A read-only serve mode for snapshots — the server refuses every
   mutating op itself, so the guarantee doesn't rest on how the
   embedder invokes the client.
 - Release layout: the servers directory must be shareable read-only
   as a unit (it already is — `libexec/container-mount/`).
-- The `mount` plugin binary: the dial client (raw XPC), the
-  helper VM, `prepare`/`list`/`version`, and plugin install into
-  `container`'s plugin root.
+- The `mount` plugin binary: the dial client (raw XPC, done),
+  `fs` and `version` (done), the helper VM, `prepare`/`list`, and
+  plugin install into `container`'s plugin root (`install-all`).
+
+The first plugin slice is in `src/bin/container-mount/plugin/` and
+`src/dial.rs`; the upstream internals it relies on, and its version
+gate, are in [container-internals.md](container-internals.md).
 
 No GitHub issues are filed for these yet.
 
 ## Open questions
 
-- vsock dial under `--network none`, and on a machine's backing
-  container.
-- `container copy` of a directory into a `FROM scratch` container.
+- vsock dial under `--network none`. (*Verified* on a machine's
+  backing container, which `machine inspect`'s `containerId` names.)
 - Helper VM: does `vminitd` mount a target disk whose own image config
   (user, workdir) is absent or odd without complaint, given an
   explicit entrypoint?
@@ -486,8 +491,10 @@ No GitHub issues are filed for these yet.
 - Plugin verbs vs container ids: `fs`, `list`, `prepare`, and
   `version` are also valid container names. Reserve them, require
   `--` before such a TARGET, or move them under flags?
-- Plugin packaging: a second `[[bin]]` in the `container-mount`
-  crate, or a cargo feature.
+- ~~Plugin packaging~~ — settled: the same binary, dispatched on its
+  file name (`bin/mount`), as container-distro does with `bin/distro`.
+  Until it is installed, `container-mount plugin ...` runs the same
+  interface.
 - Exclusive-mode lifetime: an FSKit mount outlives any CLI call, so
   something long-lived (the FSKit agent, or a supervisor tied to the
   helper container) must hold the disk. Is `list` enough for

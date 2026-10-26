@@ -107,6 +107,7 @@ ftruncate
 getattr
 getattrlist
 getegid
+getenv
 geteuid
 getfsstat
 getsockopt
@@ -121,6 +122,7 @@ journaled
 keyserver
 lchown
 libexec
+libxpc
 linkat
 listxattr
 LOCAL_PEERTOKEN
@@ -188,7 +190,9 @@ setgid
 setuid
 setxattr
 smbfs
+SO_RCVTIMEO
 socat
+SOCK_CLOEXEC
 sockaddr
 socketpair
 socklen_t
@@ -222,6 +226,7 @@ UTIME_OMIT
 utimensat
 vfat
 virtiofs
+VMADDR_CID_ANY
 vminitd
 vmnet
 vsock

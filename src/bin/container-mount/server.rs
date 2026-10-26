@@ -22,7 +22,7 @@ use std::io::{self, ErrorKind};
 use std::net::TcpListener;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::fs::{FileExt, PermissionsExt};
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -1154,6 +1154,7 @@ fn open_flags(f: OpenFlags) -> libc::c_int {
 enum Listener {
     Unix(UnixListener),
     Tcp(TcpListener),
+    Vsock(OwnedFd),
 }
 
 impl Listener {
@@ -1161,6 +1162,28 @@ impl Listener {
         match self {
             Listener::Unix(l) => l.accept().map(|(s, _)| Stream::Unix(s)),
             Listener::Tcp(l) => l.accept().map(|(s, _)| Stream::Tcp(s)),
+            Listener::Vsock(fd) => {
+                // SAFETY: plain accept on a listening socket we own; the
+                // peer address isn't wanted.
+                let conn = unsafe {
+                    libc::accept4(
+                        fd.as_raw_fd(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        libc::SOCK_CLOEXEC,
+                    )
+                };
+                if conn < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                // A vsock stream speaks the same read/write/shutdown/
+                // SO_RCVTIMEO calls as a Unix one, so `UnixStream` serves
+                // as the wrapper rather than a third `Stream` variant.
+                // SAFETY: `conn` is a fresh fd nothing else owns.
+                Ok(Stream::Unix(UnixStream::from(unsafe {
+                    OwnedFd::from_raw_fd(conn)
+                })))
+            }
         }
     }
 }
@@ -1191,17 +1214,61 @@ fn bind_unix(socket: &Path) -> io::Result<UnixListener> {
     UnixListener::bind(socket)
 }
 
+/// Listen on vsock `port` for any CID (the host dials in).
+fn bind_vsock(port: u32) -> io::Result<OwnedFd> {
+    // SAFETY: socket() has no memory preconditions.
+    let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: `fd` is a fresh socket nothing else owns.
+    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    // SAFETY: sockaddr_vm is plain data; all-zero is a valid start.
+    let mut addr: libc::sockaddr_vm = unsafe { std::mem::zeroed() };
+    addr.svm_family = libc::AF_VSOCK as libc::sa_family_t;
+    addr.svm_cid = libc::VMADDR_CID_ANY;
+    addr.svm_port = port;
+    // SAFETY: `addr` is a valid sockaddr_vm for the length passed.
+    let rc = unsafe {
+        libc::bind(
+            fd.as_raw_fd(),
+            (&addr as *const libc::sockaddr_vm).cast(),
+            std::mem::size_of::<libc::sockaddr_vm>() as libc::socklen_t,
+        )
+    };
+    // SAFETY: listen() on a socket we own.
+    if rc < 0 || unsafe { libc::listen(fd.as_raw_fd(), 16) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(fd)
+}
+
 /// The listener for `--socket`/`--listen`.
 fn listen(spec: &Listen) -> io::Result<Listener> {
     match spec {
         Listen::Unix(path) => bind_unix(path).map(Listener::Unix),
         Listen::Tcp(addr) => TcpListener::bind(addr).map(Listener::Tcp),
+        Listen::Vsock(port) => bind_vsock(*port).map(Listener::Vsock),
+    }
+}
+
+/// Unlink the running binary and, if that empties it, its directory.
+/// Best effort: a leftover copy is only clutter.
+fn remove_own_binary() {
+    let Ok(exe) = fs::read_link("/proc/self/exe") else {
+        return;
+    };
+    if fs::remove_file(&exe).is_ok()
+        && let Some(dir) = exe.parent()
+    {
+        let _ = fs::remove_dir(dir);
     }
 }
 
 /// One client: handshake, then requests fanned out to a worker pool
-/// with responses written back in completion order.
-fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<()> {
+/// with responses written back in completion order. Returns whether
+/// the peer proved the token.
+fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<bool> {
     s.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
     let nonce = random32()?;
     write_frame(
@@ -1215,7 +1282,7 @@ fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<()> {
     let auth: ClientAuth = read_frame(&mut s)?;
     if auth.version != VERSION || !ct_eq(&auth.mac, &client_mac(token, &nonce)) {
         // No detail for a peer that couldn't prove the token.
-        return Ok(());
+        return Ok(false);
     }
     let (conn, root) = Conn::new(shared).map_err(|e| io::Error::from_raw_os_error(e.0))?;
     write_frame(
@@ -1262,20 +1329,24 @@ fn session(mut s: Stream, token: &[u8], shared: Arc<Shared>) -> io::Result<()> {
     for w in workers {
         let _ = w.join();
     }
-    Ok(())
+    Ok(true)
 }
 
 pub fn serve(args: &ServeArgs) -> io::Result<()> {
-    let token = std::env::var(TOKEN_ENV)
+    let token_env = &args.token_env;
+    let token = std::env::var(token_env)
         .ok()
         .and_then(|t| unhex(&t))
         .filter(|t| t.len() == 32)
-        .ok_or_else(|| io::Error::other(format!("missing or malformed {TOKEN_ENV}")))?;
+        .ok_or_else(|| io::Error::other(format!("missing or malformed {token_env}")))?;
     // SAFETY: still single-threaded; nothing else reads the environment.
-    unsafe { std::env::remove_var(TOKEN_ENV) };
+    unsafe { std::env::remove_var(token_env) };
     let token: Arc<[u8]> = token.into();
 
     let listener = listen(&args.listen)?;
+    if args.remove_binary {
+        remove_own_binary();
+    }
     let shared = Arc::new(Shared {
         uid: args.uid,
         gid: args.gid,
@@ -1299,6 +1370,7 @@ pub fn serve(args: &ServeArgs) -> io::Result<()> {
         let Ok(stream) = listener.accept() else {
             continue;
         };
+        let once = args.once;
         let (token, shared, active, last) = (
             Arc::clone(&token),
             Arc::clone(&shared),
@@ -1307,8 +1379,12 @@ pub fn serve(args: &ServeArgs) -> io::Result<()> {
         );
         active.fetch_add(1, Ordering::SeqCst);
         thread::spawn(move || {
-            if let Err(e) = session(stream, &token, shared) {
-                eprintln!("container-mount: session ended: {e}");
+            match session(stream, &token, shared) {
+                // Only an authenticated session counts, so a guest process
+                // that connects first can't end the host's server.
+                Ok(true) if once => std::process::exit(0),
+                Ok(_) => {}
+                Err(e) => eprintln!("container-mount: session ended: {e}"),
             }
             if let Ok(mut l) = last.lock() {
                 *l = Instant::now();

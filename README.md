@@ -9,11 +9,15 @@ The project has two layers:
 - **The file bridge** — the wire protocol, the guest file server, and
   the validating host client, all in one `container-mount` binary
   (below). It was called `distrofs` before the first release.
-- **`container mount`** (in design) — a `podman mount`-style plugin
-  for Apple's `container` that reaches *any* container, stopped disk,
-  or image, and that container-distro calls for its distro mounts
-  through the plugin's CLI alone. See
-  [docs/design/mount-backends.md](docs/design/mount-backends.md).
+- **`container mount`** (first slice) — a `podman mount`-style
+  plugin for Apple's `container`. Today `container mount fs TARGET
+  ls|stat|get|put|cp|check` reaches any *running* container or
+  machine with no create-time flags (vsock dial through the
+  apiserver); stopped disks, images, and real mount points are still
+  in design. container-distro will call it through its CLI alone. See
+  [docs/design/mount-backends.md](docs/design/mount-backends.md) and,
+  for the upstream internals it depends on,
+  [docs/design/container-internals.md](docs/design/container-internals.md).
 
 One `container-mount` binary, both ends:
 
@@ -44,6 +48,8 @@ know the wire protocol.
 - `src/servers.rs` — locate/report installed and in-tree server
   binaries by arch + version stamp
 - `src/release.rs` — release lookup, SHA-256-verified downloads
+- `src/dial.rs` — the apiserver vsock dial (raw XPC, signature-pinned)
+- `src/bin/container-mount/plugin/` — the `container mount` plugin
 - `src/bin/container-mount/` — the binary: `serve`, the fs commands, and
   `servers`/`server-path`/`fetch-servers`/`update`
 
@@ -105,6 +111,11 @@ engine — Apple's `container` (Unix-socket relay + peer check), Podman,
 or Docker (TCP) — building a `FROM scratch` image with the musl server
 and running `check`/`ls`/`stat`/`get`/symlink-confinement/bad-token
 assertions. It skips cleanly with no engine.
+
+`tests/plugin-e2e.sh` (macOS, Apple `container`) drives the plugin
+path instead: no create-time flags, copy delivery, vsock dial —
+against alpine, amd64, `FROM scratch`, and (with `--machine`)
+`container machine` targets.
 
 ## Security model
 
